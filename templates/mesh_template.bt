@@ -1,0 +1,187 @@
+LittleEndian();
+
+struct vec4 { 
+    float x;
+    float y;
+    float z;
+    float w;
+};
+struct ivec4 { 
+    int x;
+    int y;
+    int z;
+    int w;
+};
+struct vec3 { 
+    float x;
+    float y;
+    float z;
+};
+struct vec2 { 
+    float x;
+    float y;
+};
+
+struct HEADER {
+    char MAGIC[4];
+    unsigned int FileSize; // filesize in bytes
+    unsigned int flag;
+    char INFO[4];
+    unsigned int numVerts;
+    unsigned int numInds;
+    unsigned short numSubmeshes;
+    struct VER {
+        char v;
+        char vMajor <format=decimal>;
+        char vMinor <format=decimal>;
+        char vRevision <format=decimal>;
+    } version <read=ReadVersionBlock>;
+    struct COMMENT {
+        unsigned short len;
+        string txt;
+    } comment;
+} headerInfo<bgcolor=cLtBlue>;
+
+// determine flags
+local unsigned int has_animations = headerInfo.flag & 0x01;
+
+// Loop through submeshes now
+local int i;
+for (i = 0; i < headerInfo.numSubmeshes; i++) {
+    struct SUBMESH {
+        string tag<bgcolor=cDkRed>;
+        unsigned int startIndex;
+        unsigned int materialIndex;
+        unsigned int numIndices;
+        float transform[16];
+    } submesh<bgcolor=cLtRed>;
+}
+
+// Read bone heirarchy if has_animations
+struct JOINT {
+    unsigned short name_len;
+    char name[name_len];
+    int parent_idx;
+    vec4 col1 <read=ReadVec4>;
+    vec4 col2 <read=ReadVec4>;
+    vec4 col3 <read=ReadVec4>;
+    vec4 col4 <read=ReadVec4>;
+};
+struct JOINTS {
+    char BONE[4];
+    unsigned short num_bones;
+
+    for (i = 0; i < num_bones; i++) {
+        JOINT joint;
+    }
+};
+if (has_animations) {
+    JOINTS joints;
+}
+
+// DATA SECTION
+// Loop through verts now
+
+struct STAT_VERT {
+    vec3 Position <read=ReadVec3>;
+    vec3 Normal <read=ReadVec3>;
+    vec3 Tangent <read=ReadVec3>;
+    vec3 Bitangent <read=ReadVec3>;
+    vec2 Tex <read=ReadVec2>;
+};
+
+struct ANIM_VERT {
+    vec3 Position <read=ReadVec3>;
+    vec3 Normal <read=ReadVec3>;
+    vec3 Tangent <read=ReadVec3>;
+    vec3 Bitangent <read=ReadVec3>;
+    vec2 Tex <read=ReadVec2>;
+    ivec4 Bones <read=ReadIVec4>;
+    vec4 Weights <read=ReadVec4>;
+};
+
+struct DATA {
+    char DATA[4];
+    struct INDS {
+        char TAG[4]<bgcolor=cDkGreen>;
+        for (i = 0; i < headerInfo.numInds; i++) {
+            unsigned int index;
+        }
+    } indexBlock <read=ReadIndexBlock>;
+    struct VERTS {
+        char TAG[4]<bgcolor=cDkGreen>;
+        for (i = 0; i < headerInfo.numVerts; i++) {
+            if (has_animations) {
+                ANIM_VERT vert;
+            } else {
+                STAT_VERT vert;
+            }
+        }
+    } vertBlock <read=ReadVertexBlock>;
+} dataBlock<bgcolor=cLtGreen>;
+
+if (has_animations) {
+    struct ANIMS {
+        char MAGIC[4];
+        unsigned short num_anims;
+        
+        for (i = 0; i < num_anims; i++) {
+            struct ASTR {
+                unsigned short name_len;
+                char name[name_len];
+            } name <read=ReadAStr>;
+        }
+    } anims;
+}
+
+char END[4] <bgcolor=cRed>;
+
+// Custom read functions
+string ReadVersionBlock( VER &d )
+{
+    string str;
+    SPrintf( str, "v%d.%d.%d", d.vMajor, d.vMinor, d.vRevision );
+    return str;
+}
+string ReadVertexBlock( VERTS &v )
+{
+    string str;
+    SPrintf( str, "%i vertices", headerInfo.numVerts );
+    return str;
+}
+string ReadIndexBlock( INDS &v )
+{
+    string str;
+    SPrintf( str, "%i indices", headerInfo.numInds );
+    return str;
+}
+string ReadVec4( vec4 &v )
+{
+    string str;
+    SPrintf( str, "[%.2f,%.2f,%.2f,%.2f]", v.x, v.y, v.z, v.w );
+    return str;
+}
+string ReadIVec4( ivec4 &v )
+{
+    string str;
+    SPrintf( str, "[%d,%d,%d,%d]", v.x, v.y, v.z, v.w );
+    return str;
+}
+string ReadVec3( vec3 &v )
+{
+    string str;
+    SPrintf( str, "[%.2f,%.2f,%.2f]", v.x, v.y, v.z );
+    return str;
+}
+string ReadVec2( vec2 &v )
+{
+    string str;
+    SPrintf( str, "[%.2f,%.2f]", v.x, v.y );
+    return str;
+}
+string ReadAStr( ASTR &v )
+{
+    string str;
+    SPrintf( str, "%s", v.name );
+    return str;
+}

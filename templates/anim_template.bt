@@ -1,0 +1,190 @@
+//------------------------------------------------
+//--- 010 Editor v13.0.1 Binary Template
+//
+//      File: 
+//   Authors: 
+//   Version: 
+//   Purpose: 
+//  Category: 
+// File Mask: 
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+//------------------------------------------------
+//--- 010 Editor v6.0 Binary Template
+//
+//      File: Tutorial.bt
+//   Authors: SweetScape Software
+//   Version: 1.1
+//   Purpose: Part of the tutorial for 
+//            learning to write binary templates. 
+//------------------------------------------------
+LittleEndian();
+
+struct vec4 { 
+    float x;
+    float y;
+    float z;
+    float w;
+};
+struct ivec4 { 
+    int x;
+    int y;
+    int z;
+    int w;
+};
+struct vec3 { 
+    float x;
+    float y;
+    float z;
+};
+struct vec2 { 
+    float x;
+    float y;
+};
+
+struct HEADER {
+    char MAGIC[4];
+    unsigned int FileSize; // filesize in bytes
+    struct VER {
+        char v;
+        char vMajor <format=decimal>;
+        char vMinor <format=decimal>;
+        char vRevision <format=decimal>;
+    } version <read=ReadVersionBlock>;
+    unsigned int flag;
+    unsigned short num_channels;
+    unsigned short num_trans_keys;
+    unsigned short num_rot_keys;
+    unsigned short num_scale_keys;
+    float duration;
+} headerInfo<bgcolor=cLtBlue>;
+
+struct TransKey {
+    unsigned int Track;
+    float FrameTime;
+    vec3 Value <read=ReadVec3>;
+};
+struct RotKey {
+    unsigned int Track;
+    float FrameTime;
+    vec4 Value <read=ReadVec4>;
+};
+struct ScaleKey {
+    unsigned int Track;
+    float FrameTime;
+    vec3 Value <read=ReadVec3>;
+};
+
+local int i;
+
+struct DataBlock {
+    char MAGIC[4];
+    struct TranslationKeys {
+        for (i = 0; i < headerInfo.num_trans_keys; i++) {
+            if (i % 2 == 0) {
+                TransKey key<bgcolor=cLtGreen>;
+            } else {
+                TransKey key<bgcolor=cDkGreen>;
+            }
+        }
+    } translationKeys;
+    struct RotationKeys {
+        for (i = 0; i < headerInfo.num_rot_keys; i++) {
+            if (i % 2 == 0) {
+                RotKey key<bgcolor=cLtRed>;
+            } else {
+                RotKey key<bgcolor=cDkRed>;
+            }
+        }
+    } rotationKeys;
+    struct ScaleKeys {
+        for (i = 0; i < headerInfo.num_scale_keys; i++) {
+            if (i % 2 == 0) {
+                ScaleKey key<bgcolor=cLtGreen>;
+            } else {
+                ScaleKey key<bgcolor=cDkGreen>;
+            }
+        }
+    } scaleKeysKeys;
+} dataBlock<bgcolor=cLtGreen>;
+
+char END[4] <bgcolor=cRed>;
+
+// Custom read functions
+string ReadVersionBlock( VER &d )
+{
+    string str;
+    SPrintf( str, "v%d.%d.%d", d.vMajor, d.vMinor, d.vRevision );
+    return str;
+}
+string ReadVec4( vec4 &v )
+{
+    string str;
+    SPrintf( str, "[%.2f,%.2f,%.2f,%.2f]", v.x, v.y, v.z, v.w );
+    return str;
+}
+string ReadIVec4( ivec4 &v )
+{
+    string str;
+    SPrintf( str, "[%d,%d,%d,%d]", v.x, v.y, v.z, v.w );
+    return str;
+}
+string ReadVec3( vec3 &v )
+{
+    string str;
+    SPrintf( str, "[%.2f,%.2f,%.2f]", v.x, v.y, v.z );
+    return str;
+}
+string ReadVec2( vec2 &v )
+{
+    string str;
+    SPrintf( str, "[%.2f,%.2f]", v.x, v.y );
+    return str;
+}
+
+/*
+struct HEADER {
+    int fileID <format=hex>;
+    float version;
+    int blockOffset[4];
+    string description;
+    if( version > 3.0 )
+        int extraData;
+} headerInfo <bgcolor=cLtBlue>;
+
+// Pre-reading data using ReadInt
+struct OPTION1 { int tag; uchar data[8]; };
+struct OPTION2 { int tag; uint64 data; };
+if( ReadInt( FTell() ) == 1 )
+    struct OPTION1 opt1;
+else
+    struct OPTION2 opt2;
+
+// Duplicate array
+double value;
+double value;
+double value;
+
+// Out-of-order reading using FSeek
+local int pos;
+local int i;
+struct DATABLOCK {
+    int dataID;
+    uchar dataArray[16];
+};
+pos = FTell(); // save read position
+for( i = 0; i < 4; i++ ) {
+    FSeek( headerInfo.blockOffset[i] );
+    DATABLOCK data <read=ReadDataBlock>;
+}
+FSeek( pos );  // restore read position
+
+// Custom read function
+string ReadDataBlock( DATABLOCK &d )
+{
+    string str;
+    SPrintf( str, "ID = '%d'", d.dataID );
+    return str;
+}
+*/
