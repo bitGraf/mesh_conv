@@ -57,15 +57,20 @@ for (i = 0; i < headerInfo.numSubmeshes; i++) {
     } submesh<bgcolor=cLtRed>;
 }
 
+struct Mat4x4 {
+    vec4 col1 <read=ReadVec4>;
+    vec4 col2 <read=ReadVec4>;
+    vec4 col3 <read=ReadVec4>;
+    vec4 col4 <read=ReadVec4>;
+};
+
 // Read bone heirarchy if has_animations
 struct JOINT {
     unsigned short name_len;
     char name[name_len];
     int parent_idx;
-    vec4 col1 <read=ReadVec4>;
-    vec4 col2 <read=ReadVec4>;
-    vec4 col3 <read=ReadVec4>;
-    vec4 col4 <read=ReadVec4>;
+    Mat4x4 Local_Matrix;
+    Mat4x4 Inv_Model_Matrix;
 };
 struct JOINTS {
     char BONE[4];
@@ -112,9 +117,15 @@ struct DATA {
         char TAG[4]<bgcolor=cDkGreen>;
         for (i = 0; i < headerInfo.numVerts; i++) {
             if (has_animations) {
-                ANIM_VERT vert;
+                if(i % 2 == 0)
+                    ANIM_VERT vert<bgcolor=cLtGreen>;
+                else
+                    ANIM_VERT vert<bgcolor=cDkGreen>;
             } else {
-                STAT_VERT vert;
+                if(i % 2 == 0)
+                    STAT_VERT vert<bgcolor=cLtGreen>;
+                else
+                    STAT_VERT vert<bgcolor=cDkGreen>;
             }
         }
     } vertBlock <read=ReadVertexBlock>;

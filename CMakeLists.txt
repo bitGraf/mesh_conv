@@ -27,7 +27,6 @@ target_sources(mesh_conv PRIVATE
     src/animation.cpp
     src/mesh.cpp
     src/skeleton.cpp
-    src/animimporter.cpp
 
     # header files
     src/mesh.h
@@ -35,7 +34,6 @@ target_sources(mesh_conv PRIVATE
     src/utils.h
     src/animation.h
     src/skeleton.h
-    src/animimporter.h
 )
 target_link_libraries(mesh_conv assimp laml)
 target_include_directories(mesh_conv PRIVATE "include/")

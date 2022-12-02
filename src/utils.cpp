@@ -69,7 +69,7 @@ namespace rh::utils {
         return false;
     }
 
-    laml::Mat4 mat4_from_aiMatrix4x4(aiMatrix4x4& in) {
+    laml::Mat4 mat4_from_aiMatrix4x4(const aiMatrix4x4& in) {
         //the a,b,c,d in assimp is the row ; the 1,2,3,4 is the column
         // my matrix 4 is column-major, theirs is row-major...
         laml::Mat4 m(in.a1, in.b1, in.c1, in.d1, 
@@ -81,7 +81,7 @@ namespace rh::utils {
         return m;
     }
 
-    laml::Vec2 vec2_from_aiVector3D(aiVector3D& in) {
+    laml::Vec2 vec2_from_aiVector3D(const aiVector3D& in) {
         laml::Vec2 v;
 
         v.x = in.x;
@@ -89,7 +89,7 @@ namespace rh::utils {
 
         return v;
     }
-    laml::Vec3 vec3_from_aiVector3D(aiVector3D& in) {
+    laml::Vec3 vec3_from_aiVector3D(const aiVector3D& in) {
         laml::Vec3 v;
 
         v.x = in.x;
@@ -98,7 +98,7 @@ namespace rh::utils {
 
         return v;
     }
-    laml::Quat vec4_from_aiVector4D(aiQuaternion& in) {
+    laml::Quat quat_from_aiQuaternion(const aiQuaternion& in) {
         laml::Quat v;
 
         v.x = in.x;

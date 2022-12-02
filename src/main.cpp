@@ -28,7 +28,7 @@ int main(int argc, char** argv) {
 
     input_filename = utils::getCmdOption(argv, argv + argc, "-f");
     if (!input_filename) {
-        input_filename = "../examples/input_anim.blend.fbx";
+        input_filename = "../examples/test.glb";
     }
     output_filename = utils::getCmdOption(argv, argv + argc, "-o");
     if (!output_filename) {
@@ -75,9 +75,9 @@ int main(int argc, char** argv) {
     // Do the actual conversion
     std::cout << "Running mesh_converter..." << std::endl;
     rh::MeshConverter conv;
-    conv.LoadInputFile(actual_input.c_str(), output_filename);
-    //conv.ProcessFile();
-    //conv.SaveOutputFile(output_filename);
+    conv.LoadInputFile(actual_input.c_str());
+    conv.ProcessFile();
+    conv.SaveOutputFile(output_filename);
 
     return 0;
 }

@@ -53,61 +53,61 @@ struct HEADER {
         char vRevision <format=decimal>;
     } version <read=ReadVersionBlock>;
     unsigned int flag;
-    unsigned short num_channels;
-    unsigned short num_trans_keys;
-    unsigned short num_rot_keys;
-    unsigned short num_scale_keys;
-    float duration;
+    float num_frames;
+    float frame_rate;
+    unsigned int num_nodes;
 } headerInfo<bgcolor=cLtBlue>;
 
 struct TransKey {
-    unsigned int Track;
     float FrameTime;
     vec3 Value <read=ReadVec3>;
 };
 struct RotKey {
-    unsigned int Track;
     float FrameTime;
     vec4 Value <read=ReadVec4>;
 };
 struct ScaleKey {
-    unsigned int Track;
     float FrameTime;
     vec3 Value <read=ReadVec3>;
 };
 
-local int i;
+local int i, j;
 
 struct DataBlock {
     char MAGIC[4];
-    struct TranslationKeys {
-        for (i = 0; i < headerInfo.num_trans_keys; i++) {
-            if (i % 2 == 0) {
-                TransKey key<bgcolor=cLtGreen>;
-            } else {
-                TransKey key<bgcolor=cDkGreen>;
+    for(j = 0; j < headerInfo.num_nodes; j++) {
+        struct NODE {
+            unsigned int node_flag;
+    
+            unsigned int num_pos_samples;
+            for (i = 0; i < num_pos_samples; i++) {
+                if (i % 2 == 0) {
+                    TransKey trans_key<bgcolor=cLtGreen>;
+                } else {
+                    TransKey trans_key<bgcolor=cDkGreen>;
+                }
             }
-        }
-    } translationKeys;
-    struct RotationKeys {
-        for (i = 0; i < headerInfo.num_rot_keys; i++) {
-            if (i % 2 == 0) {
-                RotKey key<bgcolor=cLtRed>;
-            } else {
-                RotKey key<bgcolor=cDkRed>;
+
+            unsigned int num_rot_samples;
+            for (i = 0; i < num_rot_samples; i++) {
+                if (i % 2 == 0) {
+                    RotKey rot_key<bgcolor=cLtRed>;
+                } else {
+                    RotKey rot_key<bgcolor=cDkRed>;
+                }
             }
-        }
-    } rotationKeys;
-    struct ScaleKeys {
-        for (i = 0; i < headerInfo.num_scale_keys; i++) {
-            if (i % 2 == 0) {
-                ScaleKey key<bgcolor=cLtGreen>;
-            } else {
-                ScaleKey key<bgcolor=cDkGreen>;
+
+            unsigned int num_scale_samples;
+            for (i = 0; i < num_scale_samples; i++) {
+                if (i % 2 == 0) {
+                    ScaleKey scale_key<bgcolor=cLtBlue>;
+                } else {
+                    ScaleKey scale_key<bgcolor=cDkBlue>;
+                }
             }
-        }
-    } scaleKeysKeys;
-} dataBlock<bgcolor=cLtGreen>;
+        } node;
+    }
+} dataBlock;//<bgcolor=cLtGreen>;
 
 char END[4] <bgcolor=cRed>;
 
