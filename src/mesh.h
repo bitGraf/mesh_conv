@@ -7,8 +7,6 @@
 
 #include <laml/laml.hpp>
 
-#include <assimp/Importer.hpp>
-
 #include "skeleton.h"
 #include "animation.h"
 
@@ -22,8 +20,8 @@ namespace rh {
 		laml::Vec2 tex;
 
 		// animated meshes only
-		std::vector<u32> bone_indices;
-		std::vector<f32> bone_weights;
+		laml::Vector<s32, 4> bone_indices; // glsl ivec4
+        laml::Vector<f32, 4> bone_weights; // just a Vec4
 	};
 
 	struct SubMesh {
@@ -34,23 +32,20 @@ namespace rh {
 		u32 num_vertices;
 
 		laml::Mat4 local_matrix;
-		laml::Mat4 transform;
-
-		std::string node_name, mesh_name;
-		bool rigged = false;
+		laml::Mat4 model_matrix;
 	};
 
 	struct MeshData {
 		u32 num_verts;
 		u32 num_inds;
 		u32 num_submeshes;
-		bool has_skeleton;
+		bool has_skeleton; // also means its rigged to that skeleton
 
 		std::vector<SubMesh> submeshes;
 		std::vector<Vertex> vertices;
 		std::vector<u32> indices;
 		Skeleton bind_pose;
-	};
 
-	bool extract_meshes(const aiScene* scene, MeshData& mesh);
+        std::string mesh_name;
+	};
 }

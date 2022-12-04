@@ -1,7 +1,6 @@
 #pragma once
 
 #include <laml/laml.hpp>
-#include <assimp/anim.h>
 #include <vector>
 
 #include "skeleton.h"
@@ -35,5 +34,5 @@ namespace rh {
 		std::string name;
 	};
 
-	bool extract_animation(const aiAnimation* s_anim, Animation& anim, const Skeleton& skeleton);
+	//bool extract_animation(const aiAnimation* s_anim, Animation& anim, const Skeleton& skeleton);
 }

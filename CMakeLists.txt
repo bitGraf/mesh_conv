@@ -11,11 +11,6 @@ if( MSVC )
     SET( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:mainCRTStartup" )
 endif()
 
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
-set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "enable X functionality" FORCE)
-add_subdirectory("deps/assimp")
 add_subdirectory("deps/math_lib")
 
 add_executable(mesh_conv)
@@ -35,7 +30,7 @@ target_sources(mesh_conv PRIVATE
     src/animation.h
     src/skeleton.h
 )
-target_link_libraries(mesh_conv assimp laml)
+target_link_libraries(mesh_conv laml)
 target_include_directories(mesh_conv PRIVATE "include/")
 set_target_properties(mesh_conv PROPERTIES
                       RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_LIST_DIR}/bin/"

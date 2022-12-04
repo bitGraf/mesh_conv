@@ -16,6 +16,7 @@ namespace rh {
     private:
         void writeAnimFiles(const char* filename_out);
 
+        std::vector<MeshData> m_meshes;
         MeshData m_mesh;
         std::vector<Animation> m_anims;
         bool m_valid;

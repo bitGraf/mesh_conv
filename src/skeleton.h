@@ -1,6 +1,5 @@
 #pragma once
 
-#include <assimp/scene.h>
 #include <cassert>
 #include <vector>
 #include <set>
@@ -21,11 +20,8 @@ namespace rh {
 
 		u32 num_bones;
 		std::vector<bone_info> bones;
-
-		// internal
-		std::set<std::string_view> unique_bones;
 	};
 
-	bool extract_skeleton(const aiScene* scene, Skeleton& skeleton);
+	//bool extract_skeleton(const aiScene* scene, Skeleton& skeleton);
 	u32 get_bone_index(const Skeleton& skeleton, const std::string_view name);
 }
