@@ -77,9 +77,9 @@ namespace rh {
         return (buffer.data.data() + bufferView.byteOffset);
     }
 
-    template<typename Component_Type> 
+    template<typename Component_Type>
     Component_Type read_component(int componentType, const u8* cur_element) {
-        switch(componentType) {
+        switch (componentType) {
             case TINYGLTF_COMPONENT_TYPE_BYTE: {
                 char comp = 0;
                 memcpy(&comp, cur_element, sizeof(char));
@@ -121,7 +121,7 @@ namespace rh {
 
                 return static_cast<Component_Type>(comp);
             } default:
-                assert(false);
+            assert(false);
         }
 
         Component_Type ignore_this_warning;
@@ -197,6 +197,8 @@ namespace rh {
     struct GLMesh {
         bool is_rigged;
         std::vector<GLPrimitive> primitives;
+        std::string name;
+        laml::Mat4 local_matrix;
     };
 
     struct GLBone {
@@ -218,6 +220,7 @@ namespace rh {
         int num_submeshes = tinyMesh.primitives.size();
         mesh.primitives.resize(num_submeshes);
         mesh.is_rigged = false;
+        mesh.name = tinyMesh.name;
 
         for (int n = 0; n < num_submeshes; n++) {
             tinygltf::Primitive prim = tinyMesh.primitives[n];
@@ -225,12 +228,12 @@ namespace rh {
             assert(has_correct_attributes(prim.attributes));
 
             //log_print(level, " Extracting mesh indices!\n");
-            mesh.primitives[n].indices = extract_accessor<u32, u32>(model, prim.indices, level+1);
+            mesh.primitives[n].indices = extract_accessor<u32, u32>(model, prim.indices, level + 1);
 
             //log_print(level, " Extracting static mesh attributes!\n");
             mesh.primitives[n].positions = extract_accessor<laml::Vec3, f32>(model, prim.attributes["POSITION"],   level + 1);
-            mesh.primitives[n].normals   = extract_accessor<laml::Vec3, f32>(model, prim.attributes["NORMAL"],     level + 1);
-            mesh.primitives[n].tangents  = extract_accessor<laml::Vec4, f32>(model, prim.attributes["TANGENT"],    level + 1);
+            mesh.primitives[n].normals = extract_accessor<laml::Vec3, f32>(model, prim.attributes["NORMAL"],     level + 1);
+            mesh.primitives[n].tangents = extract_accessor<laml::Vec4, f32>(model, prim.attributes["TANGENT"],    level + 1);
             mesh.primitives[n].texcoords = extract_accessor<laml::Vec2, f32>(model, prim.attributes["TEXCOORD_0"], level + 1);
         }
     }
@@ -247,7 +250,7 @@ namespace rh {
             assert(has_correct_attributes_skin(prim.attributes));
 
             //log_print(level, " Extracting skinned mesh attributes!\n");
-            mesh.primitives[n].bone_idx     = extract_accessor<laml::Vector<s32, 4>, s32>(model, prim.attributes["JOINTS_0"], level + 1);
+            mesh.primitives[n].bone_idx = extract_accessor<laml::Vector<s32, 4>, s32>(model, prim.attributes["JOINTS_0"], level + 1);
             mesh.primitives[n].bone_weights = extract_accessor<laml::Vector<f32, 4>, f32>(model, prim.attributes["WEIGHTS_0"], level + 1);
         }
     }
@@ -270,7 +273,7 @@ namespace rh {
         }
 
         // otherwise constuct it from /possible/ components
-        laml::Vec3 translation(0.0f); 
+        laml::Vec3 translation(0.0f);
         laml::Vec3 scale(1.0f);
         laml::Quat rotation(0.0f, 0.0f, 0.0f, 1.0f);
         if (node.translation.size() == 3) {
@@ -343,9 +346,9 @@ namespace rh {
         skeleton.bones.resize(skeleton.num_bones);
         for (u32 n = 0; n < skeleton.num_bones; n++) {
             GLBone &bone = skeleton.bones[n];
-            bone.inv_model_matrix = invBindMatrices[n];
             bone.bone_idx = n;
             bone.node_idx = glSkin.joints[n];
+            bone.inv_model_matrix = invBindMatrices[bone.node_idx];
             //log_print(level, "%d -> %d", n, glSkin.joints[n]);
         }
 
@@ -362,6 +365,7 @@ namespace rh {
         mesh.has_skeleton = (glskeleton != nullptr);
         mesh.num_submeshes = glmesh->primitives.size();
         mesh.submeshes.resize(mesh.num_submeshes);
+        mesh.mesh_name = glmesh->name;
 
         u32 index_count = 0;
         u32 vertex_count = 0;
@@ -371,10 +375,10 @@ namespace rh {
 
             sm.start_index = index_count;
             sm.start_vertex = vertex_count;
-            sm.mat_index = ~0; // NOT USING RN
+            sm.mat_index = 0; // NOT USING RN
             sm.num_indices = prim.indices.size();
             sm.num_vertices = prim.positions.size();
-            sm.local_matrix = laml::Mat4(1.0f);
+            sm.local_matrix = glmesh->local_matrix;
             sm.model_matrix = laml::Mat4(1.0f);
 
             // increment for next submesh
@@ -429,7 +433,7 @@ namespace rh {
                 bone.inv_model_matrix = glbone.inv_model_matrix;
                 bone.name = glbone.name;
             }
-        } 
+        }
 
         return mesh;
     }
@@ -438,22 +442,26 @@ namespace rh {
         log_print(level, "Node: '%s'\n", node.name.c_str());
 
         bool has_camera = node.camera >= 0; // unused
-        bool has_mesh   = node.mesh   >= 0;
-        bool has_skin   = node.skin   >= 0;
+        bool has_mesh = node.mesh >= 0;
+        bool has_skin = node.skin >= 0;
+
+        laml::Mat4 node_local_transform = get_node_local_transform(node, level);
 
         if (has_mesh && has_skin) {
-            log_print(level+1, "Processing Animated Mesh!\n");
+            log_print(level + 1, "Processing Animated Mesh!\n");
             GLMesh mesh;
             process_anim_mesh(model, model.meshes[node.mesh], mesh, level + 1);
+            mesh.local_matrix = node_local_transform;
             GLSkeleton skeleton;
             process_skin(model, model.skins[node.skin], skeleton, level + 1);
 
             out_meshes.push_back(CreateMeshData(&mesh, &skeleton));
         }
         else if (has_mesh) {
-            log_print(level+1, "Processing Static Mesh!\n");
+            log_print(level + 1, "Processing Static Mesh!\n");
             GLMesh mesh;
-            process_mesh(model, model.meshes[node.mesh], mesh, level+1);
+            mesh.local_matrix = node_local_transform;
+            process_mesh(model, model.meshes[node.mesh], mesh, level + 1);
 
             out_meshes.push_back(CreateMeshData(&mesh, nullptr));
         }
@@ -500,45 +508,84 @@ namespace rh {
             printf("Scene: %s\n", model.scenes[0].name.c_str());
             traverse_nodes(model, model.nodes[scene.nodes[0]], m_meshes, 1);
         }
+        printf("-----------------------------------------\n");
+        printf("Extracted %d meshes\n", (int)m_meshes.size());
+        for (u32 n = 0; n < m_meshes.size(); n++) {
+            printf(" - %s [%s] [%d/%d/%d]\n",
+                   m_meshes[n].mesh_name.c_str(), m_meshes[n].has_skeleton ? "Skinned" : "Static",
+                   m_meshes[n].num_submeshes, m_meshes[n].num_verts, m_meshes[n].num_inds);
+        }
 
+        m_valid = true;
+    }
+
+    void MeshConverter::ProcessMeshes() {
+        if (!m_valid) return;
+        printf("---------------Processing----------------\n");
+        for (u32 m = 0; m < m_meshes.size(); m++) {
+            const MeshData& mesh = m_meshes[m];
+
+            for (u32 n = 0; n < mesh.m_anims.size(); n++) {
+                const auto& anim = mesh.m_anims[n];
+
+                printf("Animation: %s\n", anim.name.c_str());
+                printf("  %d nodes\n", anim.num_nodes);
+                printf("  %.3f frames\n", anim.duration);
+                printf("  %.3f frame_rate\n", anim.frame_rate);
+                printf("  %.3f sec\n", anim.duration / anim.frame_rate);
+            }
+        }
+    }
+
+
+    // Output funcs
+    void writeMeshFile(const std::string& filename, const MeshData& mesh);
+    void writeAnimFiles(const std::string& filename, const MeshData& mesh);
+
+    void MeshConverter::SaveOutputFiles(const char* path) {
+        if (!m_valid) return;
+        printf("--------------Saving Files---------------\n");
+
+        int num_meshes = m_meshes.size();
+        if (num_meshes == 1) {
+            printf("1 mesh extracted from this file!\n");
+            writeMeshFile(path, m_meshes[0]);
+        } else {
+            std::string root_folder, filename, extension;
+            utils::decompose_path(path, root_folder, filename, extension);
+
+            printf("There are %d meshes extracted from this file!\n", num_meshes);
+            printf("Appending mesh_name to the filename provided!\n");
+            for (u32 n = 0; n < num_meshes; n++) {
+                const MeshData& mesh = m_meshes[n];
+            
+                printf("\n  Mesh #%d\n", n + 1);
+                std::string mesh_filename = root_folder + filename + "-" + mesh.mesh_name + extension;
+                writeMeshFile(mesh_filename, mesh);
+            }
+        }
         printf("-----------------------------------------\n");
     }
 
-    void MeshConverter::ProcessFile() {
-        if (!m_valid) return;
-        printf("---------------Processing----------------\n");
-        for (u32 n = 0; n < m_anims.size(); n++) {
-            const auto& anim = m_anims[n];
-
-            printf("Animation: %s\n", anim.name.c_str());
-            printf("  %d nodes\n", anim.num_nodes);
-            printf("  %.3f frames\n", anim.duration);
-            printf("  %.3f frame_rate\n", anim.frame_rate);
-            printf("  %.3f sec\n", anim.duration / anim.frame_rate);
-        }
-    }
-
-    void MeshConverter::SaveOutputFile(const char* filename) {
-        if (!m_valid) return;
-        
+    void writeMeshFile(const std::string& filename, const MeshData& mesh) {
         // Open and check for valid file
         FILE* fid = nullptr;
-        errno_t err = fopen_s(&fid, filename, "wb");
+        errno_t err = fopen_s(&fid, filename.c_str(), "wb");
         if (fid == nullptr || err) {
-            std::cout << "Failed to open output file..." << std::endl;
+            std::cout << "Failed to open output file '" << filename << "'..." << std::endl;
             return;
         }
         
-        printf("Writing to '%s'\n", filename);
+        printf("  Writing to '%s'\n", filename.c_str());
         
         // construct options flag
         u32 flag = 0;
         const u32 flag_has_animations = 0x01; // 1
         
-        if (m_mesh.has_skeleton)
+        if (mesh.has_skeleton)
             flag |= flag_has_animations;
         
-        printf("flag = %d\n", flag);
+        printf("  flag = %d\n", flag);
         
         // Write to file
         u32 filesize_write = 0;
@@ -548,9 +595,9 @@ namespace rh {
         FILESIZE += fwrite(&flag, sizeof(u32), 1, fid) * sizeof(u32);
         FILESIZE += fwrite("INFO", 1, 4, fid); // start mesh info section
         
-        FILESIZE += fwrite(&m_mesh.num_verts,   sizeof(u32), 1, fid) * sizeof(u32);
-        FILESIZE += fwrite(&m_mesh.num_inds,    sizeof(u32), 1, fid) * sizeof(u32);
-        FILESIZE += fwrite(&m_mesh.num_submeshes, sizeof(u16), 1, fid) * sizeof(u16);
+        FILESIZE += fwrite(&mesh.num_verts,   sizeof(u32), 1, fid) * sizeof(u32);
+        FILESIZE += fwrite(&mesh.num_inds,    sizeof(u32), 1, fid) * sizeof(u32);
+        FILESIZE += fwrite(&mesh.num_submeshes, sizeof(u16), 1, fid) * sizeof(u16);
         
         FILESIZE += (fputc('v', fid) == 'v');
         FILESIZE += (fputc(vMajor, fid) == vMajor);
@@ -565,20 +612,20 @@ namespace rh {
         strftime(date_str, sizeof(date_str), "%d-%m-%Y %H:%M:%S", timeinfo);
         
         char comment[100];// = "sample dummy mesh";
-        sprintf_s(comment, 100, "Mesh file generated on [%s] by mesh_conv version %s   ", date_str, Version());
-        u16 comment_len = static_cast<u16>(strlen(comment)+1);
+        sprintf_s(comment, 100, "Mesh file generated on [%s] by mesh_conv version %s  ", date_str, Version());
+        u16 comment_len = static_cast<u16>(strlen(comment) + 1);
         FILESIZE += fwrite(&comment_len, sizeof(u16), 1, fid) * sizeof(u16);
         FILESIZE += fwrite(comment, 1, comment_len-1, fid);
         FILESIZE += (fputc(0, fid) == 0);
         
-        printf("Date string: [%s]\n", date_str);
-        printf("Comment: [%s]\n", comment);
+        printf("  Date string: [%s]\n", date_str);
+        printf("  Comment: [%s]\n", comment);
         
-        for (u32 n = 0; n < m_mesh.num_submeshes; n++) {
+        for (u32 n = 0; n < mesh.num_submeshes; n++) {
             FILESIZE += fwrite("SUBMESH", 1, 7, fid);
             FILESIZE += (fputc(0, fid) == 0);
         
-            const auto& submesh = m_mesh.submeshes[n];
+            const auto& submesh = mesh.submeshes[n];
             FILESIZE += fwrite(&submesh.start_index,  sizeof(u32), 1,  fid) * sizeof(u32);
             FILESIZE += fwrite(&submesh.mat_index,    sizeof(u32), 1,  fid) * sizeof(u32);
             FILESIZE += fwrite(&submesh.num_indices,  sizeof(u32), 1,  fid) * sizeof(u32);
@@ -586,15 +633,15 @@ namespace rh {
         }
         
         // Write joint heirarchy
-        if (m_mesh.has_skeleton) {
+        if (mesh.has_skeleton) {
             FILESIZE += fwrite("BONE", 1, 4, fid);
-            const auto& skeleton = m_mesh.bind_pose;
+            const auto& skeleton = mesh.bind_pose;
         
             u16 num_bones = static_cast<u16>(skeleton.num_bones);
             FILESIZE += fwrite(&num_bones, sizeof(u16), 1, fid) * sizeof(u16);
         
             for (u32 n = 0; n < num_bones; n++) {
-                const auto& bone = m_mesh.bind_pose.bones[n];
+                const auto& bone = mesh.bind_pose.bones[n];
         
                 u16 name_len = static_cast<u16>(bone.name.length() + 1);
                 FILESIZE += fwrite(&name_len, sizeof(u16), 1, fid) * sizeof(u16);
@@ -616,42 +663,42 @@ namespace rh {
         // Index block
         FILESIZE += fwrite("IDX", 1, 3, fid);
         FILESIZE += (fputc(0, fid) == 0);
-        for (u32 n = 0; n < m_mesh.num_inds; n++) {
-            FILESIZE += fwrite(&m_mesh.indices[n], sizeof(u32), 1, fid) * sizeof(u32);
+        for (u32 n = 0; n < mesh.num_inds; n++) {
+            FILESIZE += fwrite(&mesh.indices[n], sizeof(u32), 1, fid) * sizeof(u32);
         }
         
         // Vertex block
         FILESIZE += fwrite("VERT", 1, 4, fid);
-        for (u32 n = 0; n < m_mesh.num_verts; n++) {
-            const auto& vert = m_mesh.vertices[n];
+        for (u32 n = 0; n < mesh.num_verts; n++) {
+            const auto& vert = mesh.vertices[n];
             FILESIZE += fwrite(&vert.position.x,  sizeof(f32), 3, fid) * sizeof(f32);
             FILESIZE += fwrite(&vert.normal.x,    sizeof(f32), 3, fid) * sizeof(f32);
             FILESIZE += fwrite(&vert.tangent.x,   sizeof(f32), 3, fid) * sizeof(f32);
             FILESIZE += fwrite(&vert.bitangent.x, sizeof(f32), 3, fid) * sizeof(f32);
             FILESIZE += fwrite(&vert.tex.x,       sizeof(f32), 2, fid) * sizeof(f32);
         
-            if (m_mesh.has_skeleton) {
+            if (mesh.has_skeleton) {
                 FILESIZE += fwrite(&vert.bone_indices.x, sizeof(s32), MAX_BONES_PER_VERTEX, fid) * sizeof(s32);
                 FILESIZE += fwrite(&vert.bone_indices.x, sizeof(f32), MAX_BONES_PER_VERTEX, fid) * sizeof(f32);
             }
         }
         
         // Write animation names
-        if (m_mesh.has_skeleton) {
-            printf("Writing animations: %d\n", 0);
+        if (mesh.has_skeleton) {
+            printf("  Contains %d animations...\n", 0);
             FILESIZE += fwrite("ANIM", 1, 4, fid);
-            u16 num_anims = static_cast<u16>(m_anims.size());
+            u16 num_anims = static_cast<u16>(mesh.m_anims.size());
             FILESIZE += fwrite(&num_anims, sizeof(u16), 1, fid) * sizeof(u16);
         
-            const Skeleton& skeleton = m_mesh.bind_pose;
+            const Skeleton& skeleton = mesh.bind_pose;
         
             for (int n_anim = 0; n_anim < num_anims; n_anim++) {
-                const Animation& anim = m_anims[n_anim];
+                const Animation& anim = mesh.m_anims[n_anim];
                 std::string anim_name = std::string(anim.name.c_str());
                 
                 std::replace(anim_name.begin(), anim_name.end(), '|', '-');
                 
-                u16 name_len = static_cast<u16>(anim_name.size()+1);
+                u16 name_len = static_cast<u16>(anim_name.size() + 1);
                 const char* name = anim_name.c_str();
                 
                 printf(" Anim: '%s'\n", name);
@@ -672,26 +719,29 @@ namespace rh {
         printf("  Filesize: %i\n", filesize_write);
         
         fclose(fid);
-        printf("\n");
         
         // Write animation files
-        writeAnimFiles(filename);
+        if (mesh.has_skeleton) {
+            writeAnimFiles(filename, mesh);
+        }
+
+        printf("\n");
     }
 
-    void MeshConverter::writeAnimFiles(const char* filename) {
-        if (!m_valid) return;
+    void writeAnimFiles(const std::string& filename, const MeshData& mesh) {        
+        u16 num_anims = static_cast<u16>(mesh.m_anims.size());
         
-        u16 num_anims = static_cast<u16>(m_anims.size());
-        
-        printf("Writing %d animations to file\n", (int)num_anims);
+        if (num_anims > 0)
+            printf("  Writing %d animations to file\n", (int)num_anims);
+
         std::string root_path(filename);
         root_path = root_path.substr(0, root_path.find_last_of("."));
         root_path += "_";
         
-        const Skeleton& skeleton = m_mesh.bind_pose;
+        const Skeleton& skeleton = mesh.bind_pose;
         
         for (int n = 0; n < num_anims; n++) {
-            const Animation& anim = m_anims[n];
+            const Animation& anim = mesh.m_anims[n];
             std::string anim_name = anim.name;
         
             std::replace(anim_name.begin(), anim_name.end(), '|', '-');

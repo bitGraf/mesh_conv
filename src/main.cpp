@@ -76,8 +76,8 @@ int main(int argc, char** argv) {
     std::cout << "Running mesh_converter..." << std::endl;
     rh::MeshConverter conv;
     conv.LoadInputFile(actual_input.c_str());
-    conv.ProcessFile();
-    conv.SaveOutputFile(output_filename);
+    conv.ProcessMeshes();
+    conv.SaveOutputFiles(output_filename);
 
     return 0;
 }

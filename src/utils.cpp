@@ -68,4 +68,20 @@ namespace rh::utils {
 
         return false;
     }
+
+    bool decompose_path(const std::string& path, std::string& root_folder, std::string& filename, std::string& extension) {
+        size_t last_slash = path.find_last_of("\\")+1;
+        size_t last_dot = path.find_last_of(".");
+
+        root_folder = path.substr(0, last_slash);
+        filename = path.substr(last_slash, last_dot-last_slash);
+        extension = path.substr(last_dot, path.length()-last_dot);
+
+        //printf("Input path: [%s]\n", path.c_str());
+        //printf("  root_folder: [%s]\n", root_folder.c_str());
+        //printf("  filename:    [%s]\n", filename.c_str());
+        //printf("  extension:   [%s]\n", extension.c_str());
+
+        return true;
+    }
 }

@@ -11,4 +11,6 @@ namespace rh::utils {
     bool is_blend_file(const char* filename);
 
     bool found_blender_exe(std::string& blender_path);
+
+    bool decompose_path(const std::string& path, std::string& root_folder, std::string& filename, std::string& extension);
 }

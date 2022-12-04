@@ -44,7 +44,9 @@ namespace rh {
 		std::vector<SubMesh> submeshes;
 		std::vector<Vertex> vertices;
 		std::vector<u32> indices;
+
 		Skeleton bind_pose;
+        std::vector<Animation> m_anims;
 
         std::string mesh_name;
 	};

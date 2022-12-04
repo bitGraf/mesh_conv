@@ -11,14 +11,10 @@ namespace rh {
         ~MeshConverter();
 
         void LoadInputFile(const char* filename_in);
-        void ProcessFile();
-        void SaveOutputFile(const char* filename_out);
-    private:
-        void writeAnimFiles(const char* filename_out);
+        void SaveOutputFiles(const char* path);
+        void ProcessMeshes();
 
         std::vector<MeshData> m_meshes;
-        MeshData m_mesh;
-        std::vector<Animation> m_anims;
         bool m_valid;
     };
 }
