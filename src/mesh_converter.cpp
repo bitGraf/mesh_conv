@@ -203,6 +203,7 @@ namespace rh {
         laml::Mat4 inv_model_matrix;
         laml::Mat4 local_matrix;
         int parent_idx;
+        std::string name;
         
         int bone_idx;
         int node_idx;
@@ -223,10 +224,10 @@ namespace rh {
             assert(prim.mode == TINYGLTF_MODE_TRIANGLES);
             assert(has_correct_attributes(prim.attributes));
 
-            log_print(level, " Extracting mesh indices!\n");
+            //log_print(level, " Extracting mesh indices!\n");
             mesh.primitives[n].indices = extract_accessor<u32, u32>(model, prim.indices, level+1);
 
-            log_print(level, " Extracting static mesh attributes!\n");
+            //log_print(level, " Extracting static mesh attributes!\n");
             mesh.primitives[n].positions = extract_accessor<laml::Vec3, f32>(model, prim.attributes["POSITION"],   level + 1);
             mesh.primitives[n].normals   = extract_accessor<laml::Vec3, f32>(model, prim.attributes["NORMAL"],     level + 1);
             mesh.primitives[n].tangents  = extract_accessor<laml::Vec4, f32>(model, prim.attributes["TANGENT"],    level + 1);
@@ -245,7 +246,7 @@ namespace rh {
             assert(prim.mode == TINYGLTF_MODE_TRIANGLES);
             assert(has_correct_attributes_skin(prim.attributes));
 
-            log_print(level, " Extracting skinned mesh attributes!\n");
+            //log_print(level, " Extracting skinned mesh attributes!\n");
             mesh.primitives[n].bone_idx     = extract_accessor<laml::Vector<s32, 4>, s32>(model, prim.attributes["JOINTS_0"], level + 1);
             mesh.primitives[n].bone_weights = extract_accessor<laml::Vector<f32, 4>, f32>(model, prim.attributes["WEIGHTS_0"], level + 1);
         }
@@ -299,9 +300,7 @@ namespace rh {
         const tinygltf::Node& node = model.nodes[bone.node_idx];
         
         bone.local_matrix = get_node_local_transform(node, level);
-        log_print(level, " node[%s] => ", node.name.c_str());
-        laml::print(bone.local_matrix, "%.1f");
-        printf("\n");
+        bone.name = node.name.c_str();
 
         int num_children = node.children.size();
         for (int n = 0; n < num_children; n++) {
@@ -332,10 +331,10 @@ namespace rh {
 
     void process_skin(const tinygltf::Model& model, const tinygltf::Skin& glSkin, GLSkeleton& skeleton, int level) {
         log_print(level, "Extracting skeleton!\n");
-        log_print(level, " InverseBindID = %d\n", glSkin.inverseBindMatrices);
-        log_print(level, " SkeletonID = %d\n", glSkin.skeleton);
-        log_print(level, " %d Joints\n", (int)glSkin.joints.size());
+        //log_print(level, " InverseBindID = %d\n", glSkin.inverseBindMatrices);
+        //log_print(level, " SkeletonID = %d\n", glSkin.skeleton);
         log_print(level, " Skin Name: '%s'\n", glSkin.name.c_str());
+        log_print(level, " %d Joints\n", (int)glSkin.joints.size());
 
 
         std::vector<laml::Mat4> invBindMatrices = extract_accessor<laml::Mat4, f32>(model, glSkin.inverseBindMatrices, level + 1);
@@ -352,11 +351,6 @@ namespace rh {
 
         // no crawl the skeleton to assign parent ids
         crawl_skeleton_tree(model, skeleton, 0, -1, level + 1);
-        for (u32 n = 0; n < skeleton.num_bones; n++) {
-            log_print(level+1, "%d:%s %d (node %d)\n", 
-                      n, model.nodes[skeleton.bones[n].node_idx].name.c_str(), 
-                      skeleton.bones[n].parent_idx, skeleton.bones[n].node_idx);
-        }
         assert(valid_skeleton_indices(skeleton));
     }
 
@@ -364,66 +358,78 @@ namespace rh {
         assert(glmesh);
         
         MeshData mesh;
-        if (glskeleton) {
-            // mesh has a skin
+        // mesh has a skin
+        mesh.has_skeleton = (glskeleton != nullptr);
+        mesh.num_submeshes = glmesh->primitives.size();
+        mesh.submeshes.resize(mesh.num_submeshes);
 
-            mesh.has_skeleton = true;
-            mesh.num_submeshes = glmesh->primitives.size();
-            mesh.submeshes.resize(mesh.num_submeshes);
+        u32 index_count = 0;
+        u32 vertex_count = 0;
+        for (u32 n = 0; n < mesh.num_submeshes; n++) {
+            SubMesh& sm = mesh.submeshes[n];
+            const GLPrimitive& prim = glmesh->primitives[n];
 
-            u32 index_count = 0;
-            u32 vertex_count = 0;
-            for (u32 n = 0; n < mesh.num_submeshes; n++) {
-                SubMesh& sm = mesh.submeshes[n];
-                const GLPrimitive& prim = glmesh->primitives[n];
+            sm.start_index = index_count;
+            sm.start_vertex = vertex_count;
+            sm.mat_index = ~0; // NOT USING RN
+            sm.num_indices = prim.indices.size();
+            sm.num_vertices = prim.positions.size();
+            sm.local_matrix = laml::Mat4(1.0f);
+            sm.model_matrix = laml::Mat4(1.0f);
 
-                sm.start_index  = index_count;
-                sm.start_vertex = vertex_count;
-                sm.mat_index = ~0; // NOT USING RN
-                sm.num_indices = prim.indices.size();
-                sm.num_vertices = prim.positions.size();
-                sm.local_matrix = laml::Mat4(1.0f);
-                sm.model_matrix = laml::Mat4(1.0f);
+            // increment for next submesh
+            index_count += sm.num_indices;
+            vertex_count += sm.num_vertices;
 
-                // increment for next submesh
-                index_count += sm.num_indices;
-                vertex_count += sm.num_vertices;
+            // concatenate vertices
+            for (u32 v = 0; v < sm.num_vertices; v++) {
+                Vertex vert;
 
-                // concatenate vertices
-                for (u32 v = 0; v < sm.num_vertices; v++) {
-                    Vertex vert;
-
-                    vert.position = prim.positions[v];
-                    vert.normal = prim.normals[v];
-                    vert.tex = prim.texcoords[v];
+                vert.position = prim.positions[v];
+                vert.normal = prim.normals[v];
+                vert.tex = prim.texcoords[v];
                     
-                    // gltf stores tangents as a vec4.
-                    // xyz is the normalized tangent, w is a signed value for the bitangent.
-                    // bitangent = cross(normal, tangent.xyz) * tangent.w
-                    vert.tangent = laml::Vec3(prim.tangents[v].x, prim.tangents[v].y, prim.tangents[v].z);
-                    vert.bitangent = laml::cross(vert.normal, vert.tangent) * prim.tangents[v].w;
+                // gltf stores tangents as a vec4.
+                // xyz is the normalized tangent, w is a signed value for the bitangent.
+                // bitangent = cross(normal, tangent.xyz) * tangent.w
+                vert.tangent = laml::Vec3(prim.tangents[v].x, prim.tangents[v].y, prim.tangents[v].z);
+                vert.bitangent = laml::cross(vert.normal, vert.tangent) * prim.tangents[v].w;
                     
-                    // skinned attributes
+                // skinned attributes
+                if (mesh.has_skeleton) {
                     vert.bone_indices = prim.bone_idx[v];
                     vert.bone_weights = prim.bone_weights[v];
-
-                    mesh.vertices.push_back(vert);
                 }
 
-                // concatenate indices
-                for (u32 i = 0; i < sm.num_indices; i++) {
-                    mesh.indices.push_back(prim.indices[i]);
-                }
+                mesh.vertices.push_back(vert);
             }
 
-            mesh.num_inds  = index_count;
-            mesh.num_verts = vertex_count;
-            assert(mesh.num_inds  == mesh.indices.size());
-            assert(mesh.num_verts == mesh.vertices.size());
-        } else {
-            // mesh has no skin
-
+            // concatenate indices
+            for (u32 i = 0; i < sm.num_indices; i++) {
+                mesh.indices.push_back(prim.indices[i]);
+            }
         }
+
+        mesh.num_inds = index_count;
+        mesh.num_verts = vertex_count;
+        assert(mesh.num_inds == mesh.indices.size());
+        assert(mesh.num_verts == mesh.vertices.size());
+
+        // now extract bind pose info
+        if (glskeleton) {
+            mesh.bind_pose.num_bones = glskeleton->num_bones;
+            mesh.bind_pose.bones.resize(mesh.bind_pose.num_bones);
+
+            for (u32 n = 0; n < mesh.bind_pose.num_bones; n++) {
+                bone_info& bone = mesh.bind_pose.bones[n];
+                const GLBone& glbone = glskeleton->bones[n];
+
+                bone.parent_idx = glbone.parent_idx;
+                bone.local_matrix = glbone.local_matrix;
+                bone.inv_model_matrix = glbone.inv_model_matrix;
+                bone.name = glbone.name;
+            }
+        } 
 
         return mesh;
     }
