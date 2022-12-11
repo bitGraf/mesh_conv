@@ -52,18 +52,32 @@ namespace rh {
     }
 
     bool has_correct_attributes(const std::map<std::string, int>& attributes) {
-        if (attributes.find("POSITION") == attributes.end()) return false;
-        //if (attributes.find("NORMAL") == attributes.end()) return false;
-        //if (attributes.find("TANGENT") == attributes.end()) return false;
-        //if (attributes.find("TEXCOORD_0") == attributes.end()) return false;
+        if (attributes.find("POSITION") == attributes.end()) { 
+            printf("ERROR: MISSING VERTEX POSITIONS!\n");
+            return false; }
+        if (attributes.find("NORMAL") == attributes.end()) { 
+            printf("ERROR: MISSING VERTEX NORMALS!\n");
+            return false; }
+        if (attributes.find("TANGENT") == attributes.end()) { 
+            printf("ERROR: MISSING VERTEX TANGENT!\n");
+            return false; }
+        if (attributes.find("TEXCOORD_0") == attributes.end()) { 
+            printf("ERROR: MISSING VERTEX TEXCOORD_0!\n");
+            return false; }
 
         return true;
     }
 
     bool has_correct_attributes_skin(const std::map<std::string, int>& attributes) {
         if (!has_correct_attributes(attributes)) return false;
-        if (attributes.find("JOINTS_0") == attributes.end()) return false;
-        if (attributes.find("WEIGHTS_0") == attributes.end()) return false;
+        if (attributes.find("JOINTS_0") == attributes.end()) {
+            printf("ERROR: MISSING VERTEX JOINTS_0!\n");
+            return false;
+        }
+        if (attributes.find("WEIGHTS_0") == attributes.end()) {
+            printf("ERROR: MISSING VERTEX WEIGHTS_0!\n");
+            return false;
+        }
 
         return true;
     }
@@ -210,6 +224,8 @@ namespace rh {
         
         int bone_idx;
         int node_idx;
+
+        f32 debug_length;
     };
 
     struct GLSkeleton {
@@ -312,6 +328,25 @@ namespace rh {
         bone.name = node.name.c_str();
 
         int num_children = node.children.size();
+
+        if (num_children == 0) {
+            // leaf node, set length equal to parent's length
+            bone.debug_length = skeleton.bones[parent_idx].debug_length;
+        } else {
+            // make length equal to translation offset of the first child
+            int child_bone_idx = -1;
+            for (int i = 0; i < skeleton.num_bones; i++) {
+                if (skeleton.bones[i].node_idx == node.children[0]) {
+                    child_bone_idx = skeleton.bones[i].bone_idx;
+                    break;
+                }
+            }
+            assert(child_bone_idx >= 0);
+            laml::Mat4 child_local_matrix = get_node_local_transform(node, level);
+            laml::Vec3 disp(child_local_matrix.c_14, child_local_matrix.c_24, child_local_matrix.c_34);
+            bone.debug_length = laml::length(disp);
+        }
+
         for (int n = 0; n < num_children; n++) {
             int child_node_idx = node.children[n];
             int child_bone_idx = -1;
@@ -439,8 +474,9 @@ namespace rh {
                 bone.local_matrix = glbone.local_matrix;
                 bone.inv_model_matrix = glbone.inv_model_matrix;
                 bone.name = glbone.name;
+                bone.debug_length = glbone.debug_length;
 
-                std::cout << "Bone " << bone.name << " " << bone.inv_model_matrix << std::endl;
+                //std::cout << "Bone " << bone.name << " " << bone.inv_model_matrix << std::endl;
             }
         }
 
@@ -456,12 +492,13 @@ namespace rh {
 
         laml::Mat4 node_local_transform = get_node_local_transform(node, level);
         laml::Mat4 node_model_transform = laml::mul(parent_transform, node_local_transform);
-        log_print(level, "Local_Transform: ");
-        laml::print((node_local_transform), "%.2f");
-        printf("\n");
-        log_print(level, "Model_Transform: ");
-        laml::print((node_model_transform), "%.2f");
-        printf("\n");
+        
+        //log_print(level, "Local_Transform: ");
+        //laml::print((node_local_transform), "%.2f");
+        //printf("\n");
+        //log_print(level, "Model_Transform: ");
+        //laml::print((node_model_transform), "%.2f");
+        //printf("\n");
 
         if (has_mesh && has_skin) {
             log_print(level + 1, "Processing Animated Mesh!\n");
@@ -664,7 +701,6 @@ namespace rh {
                     if (anim.num_samples == 0) {
                         anim.num_samples = node.translations.size();
                     } else {
-                        printf("=======num_samples %d  =======size() = %d\n", anim.num_samples, node.translations.size());
                         assert(anim.num_samples == node.translations.size());
                     }
                 }
@@ -922,6 +958,8 @@ namespace rh {
                 s32 parent_idx = bone.parent_idx == Skeleton::NullIndex ? -1 : static_cast<s32>(bone.parent_idx);
 
                 FILESIZE += fwrite(&parent_idx, sizeof(s32), 1, fid) * sizeof(s32);
+                FILESIZE += fwrite(&bone.debug_length, sizeof(f32), 1, fid) * sizeof(f32);
+                printf("BONE_LENGTH: %.2f\n", bone.debug_length);
         
                 FILESIZE += fwrite(&bone.local_matrix,     sizeof(f32), 16, fid) * sizeof(f32);
                 FILESIZE += fwrite(&bone.inv_model_matrix, sizeof(f32), 16, fid) * sizeof(f32);
@@ -1035,8 +1073,11 @@ namespace rh {
             u32 flag = 0;
 
             const u32 flag_non_relative_anim_transforms = 0x01; // 1
+            const u32 flag_looping_animation = 0x02; // 1
             
+            // determine these somehow
             flag |= flag_non_relative_anim_transforms;
+            flag |= flag_looping_animation;
 
             size_t FILESIZE = 0; // will get updated later
             u32 filesize_write = 0;

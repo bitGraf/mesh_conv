@@ -15,6 +15,7 @@ namespace rh {
 		std::string name;
 
         u32 node_idx;
+        f32 debug_length;
 	};
 
 	struct Skeleton {
