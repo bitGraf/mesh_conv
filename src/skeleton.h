@@ -13,6 +13,8 @@ namespace rh {
 		laml::Mat4 inv_model_matrix;
 
 		std::string name;
+
+        u32 node_idx;
 	};
 
 	struct Skeleton {

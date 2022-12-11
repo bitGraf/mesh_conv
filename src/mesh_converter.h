@@ -15,6 +15,7 @@ namespace rh {
         void ProcessMeshes();
 
         std::vector<MeshData> m_meshes;
+        f32 m_sample_frame_rate;
         bool m_valid;
     };
 }

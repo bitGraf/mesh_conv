@@ -7,31 +7,27 @@
 
 namespace rh {
 
-	template<typename T>
-	struct AnimChannel {
-		u32 num_samples;
-		std::vector<T> values;
-		std::vector<f32> frame_time;
-	};
-
 	const u32 CONSTANT_TRANSLATION = 1;
 	const u32 CONSTANT_ROTATION = 2;
 	const u32 CONSTANT_SCALE = 4;
 
 	struct AnimNode {
 		u32 flag;
-		AnimChannel<laml::Vec3> translations;
-		AnimChannel<laml::Quat> rotations;
-		AnimChannel<laml::Vec3> scales;
+        // each node is a list of transforms, one for each frame
+		std::vector<laml::Vec3> translations;
+        std::vector<laml::Quat> rotations;
+        std::vector<laml::Vec3> scales;
 	};
 
 	struct Animation {
-		std::vector<AnimNode> nodes;
+        // nodes is a list of animations assigned to each node
 		f32 duration;
 		f32 frame_rate;
+        u32 num_nodes;
+        u32 num_samples; // num_samples == nodes[n].translations.size()
 
-		u32 num_nodes;
 		std::string name;
+        std::vector<AnimNode> nodes;
 	};
 
 	//bool extract_animation(const aiAnimation* s_anim, Animation& anim, const Skeleton& skeleton);

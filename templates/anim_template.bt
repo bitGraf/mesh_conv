@@ -53,9 +53,10 @@ struct HEADER {
         char vRevision <format=decimal>;
     } version <read=ReadVersionBlock>;
     unsigned int flag;
-    float num_frames;
+    float duration;
     float frame_rate;
     unsigned int num_nodes;
+    unsigned int num_samples;
 } headerInfo<bgcolor=cLtBlue>;
 
 struct TransKey {
@@ -79,32 +80,35 @@ struct DataBlock {
         struct NODE {
             unsigned int node_flag;
     
-            unsigned int num_pos_samples;
-            for (i = 0; i < num_pos_samples; i++) {
-                if (i % 2 == 0) {
-                    TransKey trans_key<bgcolor=cLtGreen>;
-                } else {
-                    TransKey trans_key<bgcolor=cDkGreen>;
+            struct Translations {
+                for (i = 0; i < headerInfo.num_samples; i++) {
+                    if (i % 2 == 0) {
+                        vec3 translations<bgcolor=cLtGreen,read=ReadVec3>;
+                    } else {
+                        vec3 translations<bgcolor=cDkGreen,read=ReadVec3>;
+                    }
                 }
-            }
+            } translations;
 
-            unsigned int num_rot_samples;
-            for (i = 0; i < num_rot_samples; i++) {
-                if (i % 2 == 0) {
-                    RotKey rot_key<bgcolor=cLtRed>;
-                } else {
-                    RotKey rot_key<bgcolor=cDkRed>;
+            struct Rotations {
+                for (i = 0; i < headerInfo.num_samples; i++) {
+                    if (i % 2 == 0) {
+                        vec4 rotations<bgcolor=cLtGreen,read=ReadVec4>;
+                    } else {
+                        vec4 rotations<bgcolor=cDkGreen,read=ReadVec4>;
+                    }
                 }
-            }
+            } rotations;
 
-            unsigned int num_scale_samples;
-            for (i = 0; i < num_scale_samples; i++) {
-                if (i % 2 == 0) {
-                    ScaleKey scale_key<bgcolor=cLtBlue>;
-                } else {
-                    ScaleKey scale_key<bgcolor=cDkBlue>;
+            struct Scales {
+                for (i = 0; i < headerInfo.num_samples; i++) {
+                    if (i % 2 == 0) {
+                        vec3 scales<bgcolor=cLtGreen>;
+                    } else {
+                        vec3 scales<bgcolor=cDkGreen>;
+                    }
                 }
-            }
+            } scales;
         } node;
     }
 } dataBlock;//<bgcolor=cLtGreen>;

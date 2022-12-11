@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
 
 #include "animation.h"
 #include "utils.h"
@@ -20,10 +21,12 @@
 // #define TINYGLTF_NOEXCEPTION // optional. disable exception handling.
 #include "tinygltf/tiny_gltf.h"
 
+int printf (const char * format, ...); // for syntax highlighting...
+
 namespace rh {
-    const char* build_version = "v0.10.0";
-    const char vMajor = 0;
-    const char vMinor = 10;
+    const char* build_version = "v1.0.0";
+    const char vMajor = 1;
+    const char vMinor = 0;
     const char vRevision = 0;
 
     const size_t MAX_BONES_PER_VERTEX = 4;
@@ -32,7 +35,7 @@ namespace rh {
         return build_version;
     }
 
-    MeshConverter::MeshConverter() : m_valid(false) {}
+    MeshConverter::MeshConverter() : m_valid(false), m_sample_frame_rate(30.0f) {}
     MeshConverter::~MeshConverter() {}
 
     void log_print(int level, const char* format, ...) {
@@ -50,9 +53,9 @@ namespace rh {
 
     bool has_correct_attributes(const std::map<std::string, int>& attributes) {
         if (attributes.find("POSITION") == attributes.end()) return false;
-        if (attributes.find("NORMAL") == attributes.end()) return false;
-        if (attributes.find("TANGENT") == attributes.end()) return false;
-        if (attributes.find("TEXCOORD_0") == attributes.end()) return false;
+        //if (attributes.find("NORMAL") == attributes.end()) return false;
+        //if (attributes.find("TANGENT") == attributes.end()) return false;
+        //if (attributes.find("TEXCOORD_0") == attributes.end()) return false;
 
         return true;
     }
@@ -144,8 +147,11 @@ namespace rh {
         int num_components = tinygltf::GetNumComponentsInType(accessor.type);
         int num_bytes_per_Component = tinygltf::GetComponentSizeInBytes(accessor.componentType);
         int num_bytes_per_Element = accessor.ByteStride(bufferView);
+        //log_print(level, "num_components: %d\n", num_components);
+        //log_print(level, "num_bytes_per_Component: %d\n", num_bytes_per_Component);
+        //log_print(level, "num_bytes_per_Element: %d\n", num_bytes_per_Element);
         //assert(sizeof(Element_Type) == num_bytes_per_Element);
-        assert(num_components*num_bytes_per_Component == num_bytes_per_Element);
+        //assert(num_components*num_bytes_per_Component == num_bytes_per_Element);
 
         const u8* raw_data = read_buffer_view(tinyModel, accessor.bufferView); // ptr to start of byte stream for this accessor
         const u8* cur_element = raw_data; // our current cursor
@@ -157,20 +163,15 @@ namespace rh {
             cur_element = raw_data + (n * num_bytes_per_Element);
             Element_Type element;
 
-            if (accessor.type == TINYGLTF_TYPE_SCALAR) {
-                // simple case where Element_Type == Component_Type, and size is 1
-                element = read_component<Element_Type>(accessor.componentType, cur_element);
-            } else {
-                for (u32 i = 0; i < num_components; i++) {
-                    // if scalar, this just happens once per value of n.
-                    // otherwise,this acts on each component of the output
-                    // i.e. v.x, v.y, v.z for a VEC3
+            for (u32 i = 0; i < num_components; i++) {
+                // if scalar, this just happens once per value of n.
+                // otherwise,this acts on each component of the output
+                // i.e. v.x, v.y, v.z for a VEC3
 
-                    cur_comp = cur_element + (i * num_bytes_per_Component);
+                cur_comp = cur_element + (i * num_bytes_per_Component);
 
-                    Component_Type comp = read_component<Component_Type>(accessor.componentType, cur_comp);
-                    memcpy(((Component_Type*)(&element)) + (i), &comp, sizeof(Component_Type));
-                }
+                Component_Type comp = read_component<Component_Type>(accessor.componentType, cur_comp);
+                memcpy(((Component_Type*)(&element)) + (i), &comp, sizeof(Component_Type));
             }
 
             elements.push_back(element);
@@ -232,6 +233,11 @@ namespace rh {
 
             //log_print(level, " Extracting static mesh attributes!\n");
             mesh.primitives[n].positions = extract_accessor<laml::Vec3, f32>(model, prim.attributes["POSITION"],   level + 1);
+            
+            //mesh.primitives[n].normals.resize(mesh.primitives[n].positions.size());
+            //mesh.primitives[n].tangents.resize(mesh.primitives[n].positions.size());
+            //mesh.primitives[n].texcoords.resize(mesh.primitives[n].positions.size());
+
             mesh.primitives[n].normals = extract_accessor<laml::Vec3, f32>(model, prim.attributes["NORMAL"],     level + 1);
             mesh.primitives[n].tangents = extract_accessor<laml::Vec4, f32>(model, prim.attributes["TANGENT"],    level + 1);
             mesh.primitives[n].texcoords = extract_accessor<laml::Vec2, f32>(model, prim.attributes["TEXCOORD_0"], level + 1);
@@ -348,7 +354,7 @@ namespace rh {
             GLBone &bone = skeleton.bones[n];
             bone.bone_idx = n;
             bone.node_idx = glSkin.joints[n];
-            bone.inv_model_matrix = invBindMatrices[bone.node_idx];
+            bone.inv_model_matrix = (invBindMatrices[bone.bone_idx]); // TODO: why?
             //log_print(level, "%d -> %d", n, glSkin.joints[n]);
         }
 
@@ -429,16 +435,19 @@ namespace rh {
                 const GLBone& glbone = glskeleton->bones[n];
 
                 bone.parent_idx = glbone.parent_idx;
+                bone.node_idx = glbone.node_idx;
                 bone.local_matrix = glbone.local_matrix;
                 bone.inv_model_matrix = glbone.inv_model_matrix;
                 bone.name = glbone.name;
+
+                std::cout << "Bone " << bone.name << " " << bone.inv_model_matrix << std::endl;
             }
         }
 
         return mesh;
     }
 
-    void traverse_nodes(const tinygltf::Model& model, const tinygltf::Node& node, std::vector<MeshData>& out_meshes, int level) {
+    void traverse_nodes(const tinygltf::Model& model, const tinygltf::Node& node, std::vector<MeshData>& out_meshes, laml::Mat4& parent_transform, int level) {
         log_print(level, "Node: '%s'\n", node.name.c_str());
 
         bool has_camera = node.camera >= 0; // unused
@@ -446,6 +455,13 @@ namespace rh {
         bool has_skin = node.skin >= 0;
 
         laml::Mat4 node_local_transform = get_node_local_transform(node, level);
+        laml::Mat4 node_model_transform = laml::mul(parent_transform, node_local_transform);
+        log_print(level, "Local_Transform: ");
+        laml::print((node_local_transform), "%.2f");
+        printf("\n");
+        log_print(level, "Model_Transform: ");
+        laml::print((node_model_transform), "%.2f");
+        printf("\n");
 
         if (has_mesh && has_skin) {
             log_print(level + 1, "Processing Animated Mesh!\n");
@@ -468,7 +484,215 @@ namespace rh {
 
         //if (node.children.size() > 0) { log_print(level, " %d Children: \n", node.children.size()); }
         for (int n = 0; n < node.children.size(); n++) {
-            traverse_nodes(model, model.nodes[node.children[n]], out_meshes, level + 1);
+            traverse_nodes(model, model.nodes[node.children[n]], out_meshes, node_local_transform, level + 1);
+        }
+    }
+
+    template<typename T>
+    std::vector<T> sample_anim_channel(const tinygltf::Model& tinymodel, 
+                             const tinygltf::AnimationChannel& channel,
+                             const tinygltf::AnimationSampler& sampler,
+                             f32 sample_frame_rate, bool should_normalize,
+                             const std::function<T(const T&, const T&, float)>& interpolater) {
+
+        const tinygltf::Accessor& input_acc = tinymodel.accessors[sampler.input];
+        const tinygltf::Accessor& output_acc = tinymodel.accessors[sampler.output];
+
+        std::vector<f32> frame_times  = extract_accessor<f32, f32>(tinymodel, sampler.input, 0);
+        std::vector<T>   frame_values = extract_accessor<T, f32>(tinymodel, sampler.output, 0);
+
+        //printf("  time: [");
+        //for (u32 n = 0; n < frame_times.size(); n++) {
+        //    printf("%.2f ", frame_times[n]);
+        //}
+        //printf("]\n  vals: [");
+        //for (u32 n = 0; n < frame_times.size(); n++) {
+        //    if (frame_times.size() == frame_values.size())
+        //        laml::print(frame_values[n], "%.2f");
+        //    else if (3*frame_times.size() == frame_values.size())
+        //        laml::print(frame_values[3*n+1], "%.2f");
+        //    printf(", ");
+        //}
+        //printf("]\n");
+        
+
+        const f32 start_time = frame_times[0]; // offset in case the animation doesn't start at 0
+        const f32 end_time = frame_times[frame_times.size()-1];
+        const f32 sample_frame_time = 1.0f/sample_frame_rate;
+
+        std::vector<T> sampled_frames;
+
+        f32 sample_time = start_time;
+        u32 frame_num = 0;
+        u32 start = 1;
+        while(sample_time < end_time) {
+            // interpolate sample_time on the frame_times vector
+            f32 left_time;
+            f32 right_time;
+            f32 partial = 0.0f;
+            u32 left_idx = 0; 
+            u32 right_idx = 0;
+
+            for (u32 n = start; n < frame_times.size(); n++) {
+                left_time = frame_times[n-1];
+                right_time = frame_times[n];
+                left_idx = n-1;
+                right_idx = n;
+
+                if (sample_time >= left_time && sample_time < right_time) {
+                    // find the partial time
+                    partial = (sample_time - left_time) / (right_time - left_time); // [0,1] range
+                    start = n;
+                    break;
+                }
+            }
+
+            T left_value  = frame_values[left_idx];
+            T right_value = frame_values[right_idx];
+
+            T value;
+            if (sampler.interpolation == "STEP") {
+                value = left_value;
+            } else if (sampler.interpolation == "LINEAR") {
+                value = interpolater(left_value, right_value, partial);
+            } else if (sampler.interpolation == "CUBICSPLINE") {
+                // need to do something different here.
+                // there is now 3 frame_values per frame_time (in-tangent, value, out-tangent)
+                f32 delta_time = right_time - left_time;
+                //https://www.desmos.com/calculator/p6edwlosbx
+
+                left_value  = frame_values[left_idx*3 + 1];
+                right_value = frame_values[right_idx*3 + 1];
+                T left_out_tangent = frame_values[left_idx*3 + 2];
+                T right_in_tangent = frame_values[right_idx*3 + 2];
+
+                f32 t = partial;
+                f32 t2 = partial * partial;
+                f32 t3 = t2 * partial;
+
+                value = left_value * (2*t3 - 3*t2 + 1) + 
+                        left_out_tangent * ((t3 - 2*t2 + t) * delta_time) +
+                        right_value * (-2*t3 + 3*t2) + 
+                        right_in_tangent * ((t3 - t2) * delta_time);
+
+                if (should_normalize)
+                    value = laml::normalize(value);
+            }
+
+            sampled_frames.push_back(value);
+
+            frame_num++;
+            sample_time += sample_frame_time;
+        }
+
+        assert(frame_num == sampled_frames.size());
+
+        return sampled_frames;
+    }
+
+    bool animation_matches_mesh(const tinygltf::Animation& tinyanim, const MeshData& mesh) {
+        if (mesh.has_skeleton) {
+            for (u32 b = 0; b < mesh.bind_pose.num_bones; b++) {
+                if (tinyanim.channels[0].target_node == mesh.bind_pose.bones[b].node_idx) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    void extract_animations(const tinygltf::Model& tinymodel, std::vector<MeshData>& meshes, f32 sample_frame_rate) {
+        int num_anims = tinymodel.animations.size();
+        log_print(0, "%d animations\n", num_anims);
+        log_print(0, " Sampling at %.2f fps\n", sample_frame_rate);
+        for (u32 n = 0; n < num_anims; n++) {
+            const tinygltf::Animation& tinyanim = tinymodel.animations[n];
+
+            u32 mesh_id = ~0;
+            for (u32 m = 0; m < meshes.size(); m++) {
+                if (animation_matches_mesh(tinyanim, meshes[m])) {
+                    mesh_id = m;
+                    break;
+                }
+            }
+            if (mesh_id == ~0) {
+                printf("ERROR!\n");
+                return;
+            }
+
+            MeshData& mesh = meshes[mesh_id];
+
+            rh::Animation& anim = mesh.m_anims.emplace_back();
+            anim.name = tinyanim.name;
+            anim.num_nodes = mesh.bind_pose.num_bones;
+            anim.nodes.resize(anim.num_nodes);
+
+            // kinda hacky, hopefully channel 0 is representative of the whole animation!
+            const tinygltf::AnimationChannel& chan0 = tinyanim.channels[0];
+            std::vector<f32> chan0time = extract_accessor<f32, f32>(tinymodel, tinyanim.samplers[chan0.sampler].input, 0);
+            anim.duration = chan0time[chan0time.size()-1] - chan0time[0];
+            anim.frame_rate = sample_frame_rate;
+
+            printf(" Animation [%s]:\n", tinyanim.name.c_str());
+            printf("  %d channels\n", (int)tinyanim.channels.size());
+            printf("  Duration: %.2f\n", anim.duration);
+            for (u32 c = 0; c < tinyanim.channels.size(); c++) {
+                const tinygltf::AnimationChannel& channel = tinyanim.channels[c];
+                const tinygltf::AnimationSampler& sampler = tinyanim.samplers[channel.sampler];
+                
+                // find the bone that corresponds to this node
+                u32 bone_idx = ~0;
+                for (u32 nb = 0; nb < mesh.bind_pose.num_bones; nb++) {
+                    if (mesh.bind_pose.bones[nb].node_idx == channel.target_node) {
+                        bone_idx = nb;
+                        break;
+                    }
+                }
+                printf("    Node #%d|Bone #%d ", channel.target_node, bone_idx);
+
+                if (bone_idx == ~0)
+                    continue;
+
+                AnimNode& node = anim.nodes[bone_idx];
+
+                if (channel.target_path == "translation") {
+                    printf("Translation channel:\n");
+                    node.translations = sample_anim_channel<laml::Vec3>(tinymodel, channel, sampler, anim.frame_rate, false,
+                        [](const laml::Vec3& v1, const laml::Vec3& v2, f32 f) { return laml::lerp(v1, v2, f); });
+
+                    if (anim.num_samples == 0) {
+                        anim.num_samples = node.translations.size();
+                    } else {
+                        printf("=======num_samples %d  =======size() = %d\n", anim.num_samples, node.translations.size());
+                        assert(anim.num_samples == node.translations.size());
+                    }
+                }
+                else if (channel.target_path == "rotation") {
+                    printf("Rotation channel:\n");
+                    node.rotations = sample_anim_channel<laml::Quat>(tinymodel, channel, sampler, anim.frame_rate, true,
+                        [](const laml::Quat& q1, const laml::Quat& q2, f32 f) { return laml::slerp(q1, q2, f); });
+
+                    if (anim.num_samples == 0) {
+                        anim.num_samples = node.rotations.size();
+                    } else {
+                        assert(anim.num_samples == node.rotations.size());
+                    }
+                }
+                else if (channel.target_path == "scale") {
+                    printf("Scale channel:\n");
+                    node.scales = sample_anim_channel<laml::Vec3>(tinymodel, channel, sampler, anim.frame_rate, false,
+                        [](const laml::Vec3& v1, const laml::Vec3& v2, f32 f) { return laml::lerp(v1, v2, f); });
+
+                    if (anim.num_samples == 0) {
+                        anim.num_samples = node.scales.size();
+                    } else {
+                        assert(anim.num_samples == node.scales.size());
+                    }
+                }
+            }
+
+            anim.duration = static_cast<f32>(anim.num_samples) / anim.frame_rate;
         }
     }
 
@@ -481,7 +705,17 @@ namespace rh {
         std::string err;
         std::string warn;
         
-        bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, filename);
+        std::string rf, fn, ext;
+        utils::decompose_path(filename, rf, fn, ext);
+        bool ret = false;
+        if (ext == ".glb") {
+            ret = loader.LoadBinaryFromFile(&model, &err, &warn, filename);
+        } else if (ext == ".gltf") {
+            ret = loader.LoadASCIIFromFile(&model, &err, &warn, filename);
+        } else {
+            printf("Unknown file extension: [%s]\n", ext.c_str());
+            return;
+        }
 
         if (!warn.empty()) {
             printf("Warn: %s\n", warn.c_str());
@@ -497,16 +731,10 @@ namespace rh {
         }
 
         tinygltf::Scene& scene = model.scenes[model.defaultScene];
-        //printf("Scene: '%s'\n", scene.name.c_str());
-        //printf("  %d nodes\n", (int)scene.nodes.size());
-        //for (int n = 0; n < scene.nodes.size(); n++) {
-        //    auto node = model.nodes[scene.nodes[n]];
-        //    printf("   [%d] node %d '%s': %d children\n", n, scene.nodes[n], node.name.c_str(), node.children.size());
-        //}
 
         for (int n = 0; n < model.scenes.size(); n++) {
             printf("Scene: %s\n", model.scenes[0].name.c_str());
-            traverse_nodes(model, model.nodes[scene.nodes[0]], m_meshes, 1);
+            traverse_nodes(model, model.nodes[scene.nodes[0]], m_meshes, laml::Mat4(1.0f), 1);
         }
         printf("-----------------------------------------\n");
         printf("Extracted %d meshes\n", (int)m_meshes.size());
@@ -515,6 +743,9 @@ namespace rh {
                    m_meshes[n].mesh_name.c_str(), m_meshes[n].has_skeleton ? "Skinned" : "Static",
                    m_meshes[n].num_submeshes, m_meshes[n].num_verts, m_meshes[n].num_inds);
         }
+        printf("-----------------------------------------\n");
+        extract_animations(model, m_meshes, m_sample_frame_rate);
+        printf("Extracted %d animations!\n", (int)m_meshes[0].m_anims.size());
 
         m_valid = true;
     }
@@ -526,13 +757,52 @@ namespace rh {
             const MeshData& mesh = m_meshes[m];
 
             for (u32 n = 0; n < mesh.m_anims.size(); n++) {
-                const auto& anim = mesh.m_anims[n];
+                const Animation& anim = mesh.m_anims[n];
 
                 printf("Animation: %s\n", anim.name.c_str());
                 printf("  %d nodes\n", anim.num_nodes);
-                printf("  %.3f frames\n", anim.duration);
+                printf("  %d frames\n", anim.num_samples);
+                printf("  %.3f duration\n", anim.duration);
                 printf("  %.3f frame_rate\n", anim.frame_rate);
-                printf("  %.3f sec\n", anim.duration / anim.frame_rate);
+                printf("  %.3f sec\n", anim.num_samples / anim.frame_rate);
+
+                // fill empty animation channels
+                printf("  Validating animation:\n");
+                for (u32 bone_idx = 0; bone_idx < anim.num_nodes; bone_idx++) {
+                    AnimNode& bone = m_meshes[m].m_anims[n].nodes[bone_idx];
+
+                    if (bone.translations.size() == 0) {
+                        printf("  No translation animation on node %i\n", bone_idx);
+                        bone.translations.resize(anim.num_samples);
+                        // default constructor is zero-vectors
+                    }
+                    else {
+                        assert(bone.translations.size() == anim.num_samples);
+                    }
+
+                    if (bone.rotations.size() == 0) {
+                        printf("  No rotation animation on node %i\n", bone_idx);
+                        bone.rotations.resize(anim.num_samples);
+                        for (u32 j = 0; j < anim.num_samples; j++) {
+                            bone.rotations[j] = laml::Quat(0.0f, 0.0f, 0.0f, 1.0f);
+                        }
+                    } else {
+                        assert(bone.rotations.size() == anim.num_samples);
+                    }
+
+                    if (bone.scales.size() == 0) {
+                        printf("  No scale animation on node %i\n", bone_idx);
+                        bone.scales.resize(anim.num_samples);
+                        for (u32 j = 0; j < anim.num_samples; j++) {
+                            bone.scales[j] = laml::Vec3(1.0f, 1.0f, 1.0f);
+                        }
+                    } else {
+                        assert(bone.scales.size() == anim.num_samples);
+                    }
+
+                    //for (u32 i = 0; i < anim.num_samples; i++) {
+                    //}
+                }
             }
         }
     }
@@ -675,11 +945,15 @@ namespace rh {
             FILESIZE += fwrite(&vert.normal.x,    sizeof(f32), 3, fid) * sizeof(f32);
             FILESIZE += fwrite(&vert.tangent.x,   sizeof(f32), 3, fid) * sizeof(f32);
             FILESIZE += fwrite(&vert.bitangent.x, sizeof(f32), 3, fid) * sizeof(f32);
-            FILESIZE += fwrite(&vert.tex.x,       sizeof(f32), 2, fid) * sizeof(f32);
+
+            f32 y = 1.0f - vert.tex.y;
+            FILESIZE += fwrite(&vert.tex.x, sizeof(f32), 1, fid) * sizeof(f32);
+            FILESIZE += fwrite(&y, sizeof(f32), 1, fid) * sizeof(f32);
+            //FILESIZE += fwrite(&vert.tex.x,       sizeof(f32), 2, fid) * sizeof(f32);
         
             if (mesh.has_skeleton) {
                 FILESIZE += fwrite(&vert.bone_indices.x, sizeof(s32), MAX_BONES_PER_VERTEX, fid) * sizeof(s32);
-                FILESIZE += fwrite(&vert.bone_indices.x, sizeof(f32), MAX_BONES_PER_VERTEX, fid) * sizeof(f32);
+                FILESIZE += fwrite(&vert.bone_weights.x, sizeof(f32), MAX_BONES_PER_VERTEX, fid) * sizeof(f32);
             }
         }
         
@@ -780,37 +1054,33 @@ namespace rh {
             FILESIZE += fwrite(&flag, sizeof(u32), 1, fid) * sizeof(u32);
             
             /*
-		    * f32 duration;
-		    * f32 frame_rate;
-		    * u32 num_nodes;
+		     * f32 duration;
+		     * f32 frame_rate;
+             * u32 num_nodes;
+             * u32 num_samples;
             */
         
-            FILESIZE += fwrite(&anim.duration,   sizeof(f32), 1, fid) * sizeof(f32);
-            FILESIZE += fwrite(&anim.frame_rate, sizeof(f32), 1, fid) * sizeof(f32);
-            FILESIZE += fwrite(&anim.num_nodes,  sizeof(u32), 1, fid) * sizeof(u32);
+            FILESIZE += fwrite(&anim.duration,    sizeof(f32), 1, fid) * sizeof(f32);
+            FILESIZE += fwrite(&anim.frame_rate,  sizeof(f32), 1, fid) * sizeof(f32);
+            FILESIZE += fwrite(&anim.num_nodes,   sizeof(u32), 1, fid) * sizeof(u32);
+            FILESIZE += fwrite(&anim.num_samples, sizeof(u32), 1, fid) * sizeof(u32);
         
             FILESIZE += fwrite("DATA", 1, 4, fid);
             for (u32 node_idx = 0; node_idx < anim.num_nodes; node_idx++) {
-                const auto& node = anim.nodes[node_idx];
+                const AnimNode& node = anim.nodes[node_idx];
 
                 FILESIZE += fwrite(&node.flag, sizeof(u32), 1, fid) * sizeof(u32);
                 
-                FILESIZE += fwrite(&node.translations.num_samples, sizeof(u32), 1, fid) * sizeof(u32);
-                for (u32 n = 0; n < node.translations.num_samples; n++) {
-                    FILESIZE += fwrite(&node.translations.frame_time[n],  sizeof(f32), 1, fid) * sizeof(f32);
-                    FILESIZE += fwrite(node.translations.values[n]._data, sizeof(f32), 3, fid) * sizeof(f32);
+                for (u32 n = 0; n < anim.num_samples; n++) {
+                    FILESIZE += fwrite(&node.translations[n].x, sizeof(f32), 3, fid) * sizeof(f32);
                 }
 
-                FILESIZE += fwrite(&node.rotations.num_samples, sizeof(u32), 1, fid) * sizeof(u32);
-                for (u32 n = 0; n < node.rotations.num_samples; n++) {
-                    FILESIZE += fwrite(&node.rotations.frame_time[n],  sizeof(f32), 1, fid) * sizeof(f32);
-                    FILESIZE += fwrite(node.rotations.values[n]._data, sizeof(f32), 4, fid) * sizeof(f32);
+                for (u32 n = 0; n < anim.num_samples; n++) {
+                    FILESIZE += fwrite(&node.rotations[n].x, sizeof(f32), 4, fid) * sizeof(f32);
                 }
 
-                FILESIZE += fwrite(&node.scales.num_samples, sizeof(u32), 1, fid) * sizeof(u32);
-                for (u32 n = 0; n < node.scales.num_samples; n++) {
-                    FILESIZE += fwrite(&node.scales.frame_time[n],  sizeof(f32), 1, fid) * sizeof(f32);
-                    FILESIZE += fwrite(node.scales.values[n]._data, sizeof(f32), 3, fid) * sizeof(f32);
+                for (u32 n = 0; n < anim.num_samples; n++) {
+                    FILESIZE += fwrite(&node.scales[n].x,  sizeof(f32), 3, fid) * sizeof(f32);
                 }
             }
         

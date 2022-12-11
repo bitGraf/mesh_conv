@@ -35,6 +35,14 @@ int main(int argc, char** argv) {
         output_filename = "../examples/output.mesh";
     }
 
+    f32 sample_fps = 30.0f;
+    char* fps_cmd = utils::getCmdOption(argv, argv + argc, "-fps");
+    if (fps_cmd) {
+        double d = std::atof(fps_cmd);
+        if (d != 0.0)
+            sample_fps = static_cast<f32>(d);
+    }
+
     std::cout << "input filename:  [" << input_filename << "]" << std::endl;
     std::cout << "output filename: [" << output_filename << "]" << std::endl << std::endl;
 
@@ -75,6 +83,7 @@ int main(int argc, char** argv) {
     // Do the actual conversion
     std::cout << "Running mesh_converter..." << std::endl;
     rh::MeshConverter conv;
+    conv.m_sample_frame_rate = sample_fps;
     conv.LoadInputFile(actual_input.c_str());
     conv.ProcessMeshes();
     conv.SaveOutputFiles(output_filename);
