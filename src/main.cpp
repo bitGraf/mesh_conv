@@ -28,11 +28,19 @@ int main(int argc, char** argv) {
 
     input_filename = utils::getCmdOption(argv, argv + argc, "-f");
     if (!input_filename) {
-        input_filename = "../examples/input_anim.blend.fbx";
+        input_filename = "../examples/test.glb";
     }
     output_filename = utils::getCmdOption(argv, argv + argc, "-o");
     if (!output_filename) {
         output_filename = "../examples/output.mesh";
+    }
+
+    f32 sample_fps = 30.0f;
+    char* fps_cmd = utils::getCmdOption(argv, argv + argc, "-fps");
+    if (fps_cmd) {
+        double d = std::atof(fps_cmd);
+        if (d != 0.0)
+            sample_fps = static_cast<f32>(d);
     }
 
     std::cout << "input filename:  [" << input_filename << "]" << std::endl;
@@ -75,9 +83,10 @@ int main(int argc, char** argv) {
     // Do the actual conversion
     std::cout << "Running mesh_converter..." << std::endl;
     rh::MeshConverter conv;
-    conv.LoadInputFile(actual_input.c_str(), output_filename);
-    //conv.ProcessFile();
-    //conv.SaveOutputFile(output_filename);
+    conv.m_sample_frame_rate = sample_fps;
+    conv.LoadInputFile(actual_input.c_str());
+    conv.ProcessMeshes();
+    conv.SaveOutputFiles(output_filename);
 
     return 0;
 }

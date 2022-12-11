@@ -69,43 +69,19 @@ namespace rh::utils {
         return false;
     }
 
-    laml::Mat4 mat4_from_aiMatrix4x4(aiMatrix4x4& in) {
-        //the a,b,c,d in assimp is the row ; the 1,2,3,4 is the column
-        // my matrix 4 is column-major, theirs is row-major...
-        laml::Mat4 m(in.a1, in.b1, in.c1, in.d1, 
-            in.a2, in.b2, in.c2, in.d2,
-            in.a3, in.b3, in.c3, in.d3,
-            in.a4, in.b4, in.c4, in.d4
-        );
+    bool decompose_path(const std::string& path, std::string& root_folder, std::string& filename, std::string& extension) {
+        size_t last_slash = path.find_last_of("\\")+1;
+        size_t last_dot = path.find_last_of(".");
 
-        return m;
-    }
+        root_folder = path.substr(0, last_slash);
+        filename = path.substr(last_slash, last_dot-last_slash);
+        extension = path.substr(last_dot, path.length()-last_dot);
 
-    laml::Vec2 vec2_from_aiVector3D(aiVector3D& in) {
-        laml::Vec2 v;
+        //printf("Input path: [%s]\n", path.c_str());
+        //printf("  root_folder: [%s]\n", root_folder.c_str());
+        //printf("  filename:    [%s]\n", filename.c_str());
+        //printf("  extension:   [%s]\n", extension.c_str());
 
-        v.x = in.x;
-        v.y = in.y;
-
-        return v;
-    }
-    laml::Vec3 vec3_from_aiVector3D(aiVector3D& in) {
-        laml::Vec3 v;
-
-        v.x = in.x;
-        v.y = in.y;
-        v.z = in.z;
-
-        return v;
-    }
-    laml::Quat vec4_from_aiVector4D(aiQuaternion& in) {
-        laml::Quat v;
-
-        v.x = in.x;
-        v.y = in.y;
-        v.z = in.z;
-        v.w = in.w;
-
-        return v;
+        return true;
     }
 }

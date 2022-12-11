@@ -1,10 +1,6 @@
 #pragma once
 
 #include <string>
-#include <assimp/matrix4x4.h>
-#include <assimp/vector2.h>
-#include <assimp/vector3.h>
-#include <assimp/quaternion.h>
 
 #include "mesh.h"
 
@@ -16,8 +12,5 @@ namespace rh::utils {
 
     bool found_blender_exe(std::string& blender_path);
 
-    laml::Mat4 mat4_from_aiMatrix4x4(aiMatrix4x4& in);
-    laml::Vec2 vec2_from_aiVector3D(aiVector3D& in);
-    laml::Vec3 vec3_from_aiVector3D(aiVector3D& in);
-    laml::Quat quat_from_aiQuaternion(aiQuaternion& in);
+    bool decompose_path(const std::string& path, std::string& root_folder, std::string& filename, std::string& extension);
 }

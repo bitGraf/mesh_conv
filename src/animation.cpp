@@ -1,17 +1,21 @@
 #include "animation.h"
 
+#include <unordered_map>
+#include <map>
+#include "utils.h"
+
 namespace rh {
 
-	Animation::Animation(const std::string_view name, const float duration)
-		: m_Name(name)
-		, m_Duration(duration)
-	{}
+	u32 find_bone_index(const std::string& node_name, const Skeleton& skeleton) {
+		for (u32 bone_idx = 0; bone_idx < skeleton.num_bones; bone_idx++) {
+			const auto& bone = skeleton.bones[bone_idx];
 
+			if (bone.name == node_name) {
+				return bone_idx;
+			}
+		}
 
-	void Animation::SetKeyFrames(std::vector<TranslationKey> translations, std::vector<RotationKey> rotations, std::vector<ScaleKey> scales)
-	{
-		m_TranslationKeys = std::move(translations);
-		m_RotationKeys = std::move(rotations);
-		m_ScaleKeys = std::move(scales);
+		assert(false && "Could not find node_name in the skeleton!");
+		return ~0;
 	}
 }

@@ -10,10 +10,12 @@ namespace rh {
         MeshConverter();
         ~MeshConverter();
 
-        void LoadInputFile(const char* filename_in, const char* filename_out);
-    private:
-        void ProcessFile(MeshSource* ms);
-        void SaveOutputFile(const char* filename, const MeshSource* ms);
-        void writeAnimFiles(const char* filename, const MeshSource* ms);
+        void LoadInputFile(const char* filename_in);
+        void SaveOutputFiles(const char* path);
+        void ProcessMeshes();
+
+        std::vector<MeshData> m_meshes;
+        f32 m_sample_frame_rate;
+        bool m_valid;
     };
 }

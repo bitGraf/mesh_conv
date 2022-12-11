@@ -1,51 +1,34 @@
 #pragma once
 
 #include <laml/laml.hpp>
-
 #include <vector>
+
+#include "skeleton.h"
 
 namespace rh {
 
-	// A single keyed (by frame time and track number) value for an animation
-	template<typename T>
-	struct AnimationKey
-	{
-		T Value;
-		f32 FrameTime;       // 0.0f = beginning of animation clip, 1.0f = end of animation clip 
-		u32 Track;
+	const u32 CONSTANT_TRANSLATION = 1;
+	const u32 CONSTANT_ROTATION = 2;
+	const u32 CONSTANT_SCALE = 4;
 
-		AnimationKey(const f32 frameTime, const u32 track, const T& value)
-			: FrameTime(frameTime)
-			, Track(track)
-			, Value(value)
-		{}
+	struct AnimNode {
+		u32 flag;
+        // each node is a list of transforms, one for each frame
+		std::vector<laml::Vec3> translations;
+        std::vector<laml::Quat> rotations;
+        std::vector<laml::Vec3> scales;
 	};
-	using TranslationKey = AnimationKey<laml::Vec3>;
-	using RotationKey = AnimationKey<laml::Quat>;
-	using ScaleKey = AnimationKey<laml::Vec3>;
 
-	// Animation is a collection of keyed values for translation, rotation, and scale of a number of "tracks"
-	// Typically one "track" = one bone of a skeleton.
-	// (but later we may also want to animate other things, so a "track" isn't necessarily a bone)
-	class Animation
-	{
-	public:
-		Animation(const std::string_view name, const float duration);
+	struct Animation {
+        // nodes is a list of animations assigned to each node
+		f32 duration;
+		f32 frame_rate;
+        u32 num_nodes;
+        u32 num_samples; // num_samples == nodes[n].translations.size()
 
-		const std::string& GetName() const { return m_Name; }
-		float GetDuration() const { return m_Duration; }
-
-		void SetKeyFrames(std::vector<TranslationKey> translations, std::vector<RotationKey> rotations, std::vector<ScaleKey> scales);
-
-		const auto& GetTranslationKeys() const { return m_TranslationKeys; }
-		const auto& GetRotationKeys() const { return m_RotationKeys; }
-		const auto& GetScaleKeys() const { return m_ScaleKeys; }
-
-	private:
-		std::vector<TranslationKey> m_TranslationKeys;
-		std::vector<RotationKey> m_RotationKeys;
-		std::vector<ScaleKey> m_ScaleKeys;
-		std::string m_Name;
-		f32 m_Duration;
+		std::string name;
+        std::vector<AnimNode> nodes;
 	};
+
+	//bool extract_animation(const aiAnimation* s_anim, Animation& anim, const Skeleton& skeleton);
 }

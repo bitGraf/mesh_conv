@@ -53,61 +53,65 @@ struct HEADER {
         char vRevision <format=decimal>;
     } version <read=ReadVersionBlock>;
     unsigned int flag;
-    unsigned short num_channels;
-    unsigned short num_trans_keys;
-    unsigned short num_rot_keys;
-    unsigned short num_scale_keys;
     float duration;
+    float frame_rate;
+    unsigned int num_nodes;
+    unsigned int num_samples;
 } headerInfo<bgcolor=cLtBlue>;
 
 struct TransKey {
-    unsigned int Track;
     float FrameTime;
     vec3 Value <read=ReadVec3>;
 };
 struct RotKey {
-    unsigned int Track;
     float FrameTime;
     vec4 Value <read=ReadVec4>;
 };
 struct ScaleKey {
-    unsigned int Track;
     float FrameTime;
     vec3 Value <read=ReadVec3>;
 };
 
-local int i;
+local int i, j;
 
 struct DataBlock {
     char MAGIC[4];
-    struct TranslationKeys {
-        for (i = 0; i < headerInfo.num_trans_keys; i++) {
-            if (i % 2 == 0) {
-                TransKey key<bgcolor=cLtGreen>;
-            } else {
-                TransKey key<bgcolor=cDkGreen>;
-            }
-        }
-    } translationKeys;
-    struct RotationKeys {
-        for (i = 0; i < headerInfo.num_rot_keys; i++) {
-            if (i % 2 == 0) {
-                RotKey key<bgcolor=cLtRed>;
-            } else {
-                RotKey key<bgcolor=cDkRed>;
-            }
-        }
-    } rotationKeys;
-    struct ScaleKeys {
-        for (i = 0; i < headerInfo.num_scale_keys; i++) {
-            if (i % 2 == 0) {
-                ScaleKey key<bgcolor=cLtGreen>;
-            } else {
-                ScaleKey key<bgcolor=cDkGreen>;
-            }
-        }
-    } scaleKeysKeys;
-} dataBlock<bgcolor=cLtGreen>;
+    for(j = 0; j < headerInfo.num_nodes; j++) {
+        struct NODE {
+            unsigned int node_flag;
+    
+            struct Translations {
+                for (i = 0; i < headerInfo.num_samples; i++) {
+                    if (i % 2 == 0) {
+                        vec3 translations<bgcolor=cLtGreen,read=ReadVec3>;
+                    } else {
+                        vec3 translations<bgcolor=cDkGreen,read=ReadVec3>;
+                    }
+                }
+            } translations;
+
+            struct Rotations {
+                for (i = 0; i < headerInfo.num_samples; i++) {
+                    if (i % 2 == 0) {
+                        vec4 rotations<bgcolor=cLtGreen,read=ReadVec4>;
+                    } else {
+                        vec4 rotations<bgcolor=cDkGreen,read=ReadVec4>;
+                    }
+                }
+            } rotations;
+
+            struct Scales {
+                for (i = 0; i < headerInfo.num_samples; i++) {
+                    if (i % 2 == 0) {
+                        vec3 scales<bgcolor=cLtGreen>;
+                    } else {
+                        vec3 scales<bgcolor=cDkGreen>;
+                    }
+                }
+            } scales;
+        } node;
+    }
+} dataBlock;//<bgcolor=cLtGreen>;
 
 char END[4] <bgcolor=cRed>;
 
