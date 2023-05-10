@@ -28,11 +28,11 @@ int main(int argc, char** argv) {
 
     input_filename = utils::getCmdOption(argv, argv + argc, "-f");
     if (!input_filename) {
-        input_filename = "../examples/guy.glb";
+        input_filename = "../test/input.glb";
     }
     output_filename = utils::getCmdOption(argv, argv + argc, "-o");
     if (!output_filename) {
-        output_filename = "../examples/output.mesh";
+        output_filename = "../test/output.mesh";
     }
 
     f32 sample_fps = 30.0f;

@@ -207,6 +207,8 @@ namespace rh {
         // only for animated meshes
         std::vector<laml::Vector<s32, 4>> bone_idx;
         std::vector<laml::Vec4> bone_weights;
+
+        int material_idx;
     };
 
     struct GLMesh {
@@ -243,6 +245,8 @@ namespace rh {
             tinygltf::Primitive prim = tinyMesh.primitives[n];
             assert(prim.mode == TINYGLTF_MODE_TRIANGLES);
             assert(has_correct_attributes(prim.attributes));
+
+            mesh.primitives[n].material_idx = prim.material;
 
             //log_print(level, " Extracting mesh indices!\n");
             mesh.primitives[n].indices = extract_accessor<u32, u32>(model, prim.indices, level + 1);
@@ -416,7 +420,7 @@ namespace rh {
 
             sm.start_index = index_count;
             sm.start_vertex = vertex_count;
-            sm.mat_index = 0; // NOT USING RN
+            sm.mat_index = prim.material_idx;
             sm.num_indices = prim.indices.size();
             sm.num_vertices = prim.positions.size();
             sm.local_matrix = glmesh->local_matrix;
@@ -766,18 +770,33 @@ namespace rh {
             return;
         }
 
-        tinygltf::Scene& scene = model.scenes[model.defaultScene];
-
         for (int n = 0; n < model.scenes.size(); n++) {
-            printf("Scene: %s\n", model.scenes[0].name.c_str());
+            tinygltf::Scene& scene = model.scenes[n];
+            printf("Scene: %s\n", scene.name.c_str());
             traverse_nodes(model, model.nodes[scene.nodes[0]], m_meshes, laml::Mat4(1.0f), 1);
         }
         printf("-----------------------------------------\n");
         printf("Extracted %d meshes\n", (int)m_meshes.size());
         for (u32 n = 0; n < m_meshes.size(); n++) {
+            const rh::MeshData& mesh = m_meshes[n];
             printf(" - %s [%s] [%d/%d/%d]\n",
-                   m_meshes[n].mesh_name.c_str(), m_meshes[n].has_skeleton ? "Skinned" : "Static",
-                   m_meshes[n].num_submeshes, m_meshes[n].num_verts, m_meshes[n].num_inds);
+                mesh.mesh_name.c_str(), mesh.has_skeleton ? "Skinned" : "Static",
+                mesh.num_submeshes, mesh.num_verts, mesh.num_inds);
+            if (mesh.num_submeshes > 1) {
+                printf("   %d submeshes\n", mesh.num_submeshes);
+                for (u32 nn = 0; nn < mesh.num_submeshes; nn++) {
+                    const rh::SubMesh& sm = mesh.submeshes[nn];
+                    printf("    - %d verts, %d inds, material %d\n",
+                        sm.num_vertices, sm.num_indices, sm.mat_index);
+                }
+            }
+        }
+        printf("-----------------------------------------\n");
+        printf("Extracted %d materials\n", (int)model.materials.size());
+        for (u32 n = 0; n < model.materials.size(); n++) {
+            const tinygltf::Material& mat = model.materials[n];
+            printf(" - %s [%s]\n",
+                mat.name.c_str(), mat.doubleSided ? "double sided" : "single sided");
         }
         printf("-----------------------------------------\n");
         extract_animations(model, m_meshes, m_sample_frame_rate);
