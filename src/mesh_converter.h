@@ -1,21 +1,11 @@
 #pragma once
 
-#include "mesh.h"
+#include <cassert>
+#include <laml/laml.hpp>
+#include "utils.h"
 
-namespace rh {
-    const char* Version();
+struct mesh_conv_opts {
+    real32 sample_rate;
+};
 
-    class MeshConverter {
-    public:
-        MeshConverter();
-        ~MeshConverter();
-
-        void LoadInputFile(const char* filename_in);
-        void SaveOutputFiles(const char* path);
-        void ProcessMeshes();
-
-        std::vector<MeshData> m_meshes;
-        f32 m_sample_frame_rate;
-        bool m_valid;
-    };
-}
+bool convert_file(const std::string& input_filename, const std::string& output_filename, const mesh_conv_opts& opts);

@@ -1,9 +1,23 @@
 #include "utils.h"
-//#include <algorithm>
+
 #include <fstream>
 #include <vector>
+#include <cstdarg>
 
-namespace rh::utils {
+void level_print(int level, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    for (int n = 0; n < level; n++) {
+        printf(" \371 ");
+    }
+
+    vprintf(format, args);
+
+    va_end(args);
+}
+
+namespace utils {
 
     char* getCmdOption(char** begin, char** end, const std::string& option)
     {
@@ -72,10 +86,17 @@ namespace rh::utils {
     bool decompose_path(const std::string& path, std::string& root_folder, std::string& filename, std::string& extension) {
         size_t last_slash = path.find_last_of("\\")+1;
         size_t last_dot = path.find_last_of(".");
-
-        root_folder = path.substr(0, last_slash);
-        filename = path.substr(last_slash, last_dot-last_slash);
-        extension = path.substr(last_dot, path.length()-last_dot);
+        if (last_dot < last_slash) {
+            // no extension?
+            root_folder = path.substr(0, last_slash);
+            filename = path.substr(last_slash, path.length() - last_slash);
+            extension = std::string();
+        }
+        else {
+            root_folder = path.substr(0, last_slash);
+            filename = path.substr(last_slash, last_dot - last_slash);
+            extension = path.substr(last_dot, path.length() - last_dot);
+        }
 
         //printf("Input path: [%s]\n", path.c_str());
         //printf("  root_folder: [%s]\n", root_folder.c_str());
@@ -83,5 +104,31 @@ namespace rh::utils {
         //printf("  extension:   [%s]\n", extension.c_str());
 
         return true;
+    }
+
+    laml::Vec3 map_gltf_vec_to_vec3(const std::vector<double>& gltf_vec) {
+        laml::Vec3 vec;
+
+        vec.x = gltf_vec[0];
+        vec.y = gltf_vec[1];
+        vec.z = gltf_vec[2];
+
+        return vec;
+    }
+
+    std::string mime_type_to_ext(std::string mime_type) {
+        // only doing image/subtype
+
+        size_t slash = mime_type.find_last_of("/")+1;
+
+        std::string type = mime_type.substr(0, slash-1);
+        std::string subtype = mime_type.substr(slash, mime_type.length()-slash);
+
+        if (type.compare("image") == 0) {
+            return subtype;
+        } else {
+            printf("[ERROR] unexpected MIME type: '%s'\n", mime_type.c_str());
+            return std::string();
+        }
     }
 }
