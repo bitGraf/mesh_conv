@@ -34,3 +34,6 @@
 # cmake build dirs
 build/
 bin/
+
+# blender files
+*.blend1

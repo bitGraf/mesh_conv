@@ -1,53 +1,42 @@
 #include "mesh_converter.h"
-
 #include "utils.h"
-#include <iostream>
-
-using namespace rh;
 
 int main(int argc, char** argv) {
     char *input_filename, *output_filename;
 
     if (utils::cmdOptionExists(argv, argv + argc, "-v") || utils::cmdOptionExists(argv, argv + argc, "--version")) {
-        std::cout << " Version " << rh::Version() << std::endl;
+        printf(" Version %d\n", -1);
         return 0;
     }
 
     if (utils::cmdOptionExists(argv, argv + argc, "-h"))
     {
-        std::cout << "Help Message ^-^" << std::endl;
+        printf("Help Message ^-^\n");
         return 0;
-    }
-
-    float scale_factor = 100.0f;
-    if (utils::cmdOptionExists(argv, argv + argc, "-s1")) {
-        scale_factor = 1.0f;
-    } else if (utils::cmdOptionExists(argv, argv + argc, "-s100")) {
-        scale_factor = 100.0f;
     }
 
     input_filename = utils::getCmdOption(argv, argv + argc, "-f");
     if (!input_filename) {
-        input_filename = "../test/input.glb";
+        input_filename = "..\\examples\\test_level.gltf";
     }
     output_filename = utils::getCmdOption(argv, argv + argc, "-o");
     if (!output_filename) {
-        output_filename = "../test/output.mesh";
+        output_filename = "..\\examples\\test_level";
     }
 
-    f32 sample_fps = 30.0f;
+    real32 sample_fps = 30.0f;
     char* fps_cmd = utils::getCmdOption(argv, argv + argc, "-fps");
     if (fps_cmd) {
         double d = std::atof(fps_cmd);
         if (d != 0.0)
-            sample_fps = static_cast<f32>(d);
+            sample_fps = static_cast<real32>(d);
     }
 
-    std::cout << "input filename:  [" << input_filename << "]" << std::endl;
-    std::cout << "output filename: [" << output_filename << "]" << std::endl << std::endl;
+    printf("input filename:  [%s]\n", input_filename);
+    printf("output filename: [%s]\n\n", output_filename);
 
     std::string actual_input;
-    if (utils::is_blend_file(input_filename)) {
+    if (false && utils::is_blend_file(input_filename)) {
         printf("Running the converter with a .blend file input\n");
 
         std::string blender_exe_filepath;
@@ -81,12 +70,15 @@ int main(int argc, char** argv) {
     }
 
     // Do the actual conversion
-    std::cout << "Running mesh_converter..." << std::endl;
-    rh::MeshConverter conv;
-    conv.m_sample_frame_rate = sample_fps;
-    conv.LoadInputFile(actual_input.c_str());
-    conv.ProcessMeshes();
-    conv.SaveOutputFiles(output_filename);
+    printf("Running mesh_converter...\n");
+
+    mesh_conv_opts opts = {};
+    opts.sample_rate = sample_fps;
+    if (!convert_file(actual_input, output_filename, opts)) {
+        printf("Failed to succesfully convert file!\n");
+    } else {
+        printf("Succesfully converted file!\n");
+    }
 
     return 0;
 }
