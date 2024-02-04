@@ -11,17 +11,24 @@ int main(int argc, char** argv) {
 
     if (utils::cmdOptionExists(argv, argv + argc, "-h"))
     {
-        printf("Help Message ^-^\n");
+        //printf("Help Message ^-^\n");
+        printf("usage: mesh_conv [-v | --version] [-h] [-f input.gltf] [-o output/folder] [-fps 30]\n");
         return 0;
     }
 
     input_filename = utils::getCmdOption(argv, argv + argc, "-f");
     if (!input_filename) {
-        input_filename = "..\\examples\\test_level.gltf";
+        input_filename = "..\\examples\\garden.gltf";
     }
     output_filename = utils::getCmdOption(argv, argv + argc, "-o");
     if (!output_filename) {
-        output_filename = "..\\examples\\test_level";
+        output_filename = "..\\examples\\garden";
+    }
+
+    bool pack_files = false;
+    if (utils::cmdOptionExists(argv, argv + argc, "-pack")) {
+        printf("Packing model files into one file.\n");
+        pack_files = true;
     }
 
     real32 sample_fps = 30.0f;
@@ -74,6 +81,7 @@ int main(int argc, char** argv) {
 
     mesh_conv_opts opts = {};
     opts.sample_rate = sample_fps;
+    opts.pack_files = pack_files;
     if (!convert_file(actual_input, output_filename, opts)) {
         printf("Failed to succesfully convert file!\n");
     } else {

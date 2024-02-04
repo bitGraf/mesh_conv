@@ -37,6 +37,8 @@ struct Mesh {
     std::string mesh_name;
     std::string name;
     std::vector<Mesh_Primitive> primitives;
+
+    bool32 is_collider;
 };
 
 /****************************************
@@ -194,6 +196,22 @@ void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_
     mesh.primitives.resize(num_primitives);
     mesh.is_rigged = false;
     mesh.mesh_name = gltf_mesh.name;
+
+    tinygltf::Value extras = gltf_mesh.extras;
+    bool is_collider = false;
+    if (extras.IsObject()) {
+        if (extras.Has("collision_obj")) {
+            auto has_collision = extras.Get("collision_obj");
+            if (has_collision.IsBool()) {
+                is_collider = has_collision.Get<bool>();
+            }
+        }
+    }
+
+    if (is_collider) {
+        level_print(level, "    has 'collision' tag\n");
+    }
+    mesh.is_collider = is_collider;
 
     for (int n = 0; n < num_primitives; n++) {
         tinygltf::Primitive prim = gltf_mesh.primitives[n];
@@ -493,18 +511,47 @@ bool convert_file(const std::string& input_filename, const std::string& output_f
     printf("Extracted %d materials.\n", (int)extracted_materials.size());
     printf("-----------------------------------------\n");
 
-    // Write each mesh to its own file
+    // Write each render mesh to its own file
     printf("Writing mesh files...\n");
     _mkdir(output_folder.c_str());
+    std::string mesh_folder = output_folder + '\\' + "render_meshes";
+    _mkdir(mesh_folder.c_str());
     std::unordered_set<std::string> written_meshes; // to catch duplicates
     for (int n = 0; n < extracted_meshes.size(); n++) {
         const Mesh& mesh = extracted_meshes[n];
 
+        if (mesh.is_collider) continue;
+
         if (written_meshes.find(mesh.mesh_name) == written_meshes.end()) {
             printf("  Writing mesh %2d: '%s.mesh'...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str());
-            if (write_mesh_file(mesh, extracted_materials, output_folder)) {
+            if (write_mesh_file(mesh, extracted_materials, mesh_folder)) {
                 printf("done!\n");
             } else {
+                printf("failed!\n");
+                success = false;
+            }
+            written_meshes.insert(mesh.mesh_name);
+        }
+    }
+    printf("Wrote %d files.\n", (int)written_meshes.size());
+    printf("-----------------------------------------\n");
+
+    // Write collision meshes to files
+    printf("Writing collider files...\n");
+    std::string collision_folder = output_folder + '\\' + "collision_meshes";
+    _mkdir(collision_folder.c_str());
+    written_meshes.clear(); // to catch duplicates
+    for (int n = 0; n < extracted_meshes.size(); n++) {
+        const Mesh& mesh = extracted_meshes[n];
+
+        if (!mesh.is_collider) continue;
+
+        if (written_meshes.find(mesh.mesh_name) == written_meshes.end()) {
+            printf("  Writing mesh %2d: '%s.mesh'...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str());
+            if (write_mesh_file(mesh, extracted_materials, collision_folder)) {
+                printf("done!\n");
+            }
+            else {
                 printf("failed!\n");
                 success = false;
             }
@@ -556,8 +603,8 @@ size_t write_string(FILE* fid, const std::string& string) {
     return written;
 }
 
-bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials, const std::string& root_folder) {
-    std::string filename = root_folder + '\\' + mesh.mesh_name + ".mesh";
+bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials, const std::string& mesh_folder) {
+    std::string filename = mesh_folder + '\\' + mesh.mesh_name + ".mesh";
 
     // Open and check for valid file
     FILE* fid = nullptr;
@@ -682,7 +729,7 @@ bool32 write_level_file(const std::vector<Mesh>& meshes, const std::vector<Mater
         return false;
     }
 
-    uint16 num_meshes    = meshes.size();
+    uint16 num_meshes = meshes.size();
     uint16 num_materials = materials.size();
 
     // construct options flag
@@ -706,8 +753,11 @@ bool32 write_level_file(const std::vector<Mesh>& meshes, const std::vector<Mater
         const Mesh& mesh = meshes[n];
 
         FILESIZE += fwrite(&mesh.transform.c_11, sizeof(real32), 16, fid) * sizeof(real32);
+        FILESIZE += fwrite(&mesh.is_collider, sizeof(bool32), 1, fid) * sizeof(bool32);
         FILESIZE += write_string(fid, mesh.name);
         FILESIZE += write_string(fid, mesh.mesh_name);
+
+        printf(" %32s -> '%s'\n", mesh.name.c_str(), mesh.mesh_name.c_str());
     }
 
     FILESIZE += fwrite("END", 1, 3, fid);
