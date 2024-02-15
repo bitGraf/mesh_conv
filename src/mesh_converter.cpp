@@ -13,7 +13,7 @@
 // windows specific
 #include <direct.h>
 
-const uint32 MESH_VERSION = 1;
+const uint32 MESH_VERSION = 2;
 const uint32 LEVEL_VERSION = 1;
 
 /****************************************
@@ -639,7 +639,7 @@ bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials,
     FILESIZE += fwrite(&flag, sizeof(uint32), 1, fid) * sizeof(uint32);
     FILESIZE += fwrite(&timestamp, sizeof(uint64), 1, fid) * sizeof(uint64);
     FILESIZE += fwrite(&num_prims, sizeof(uint16), 1, fid) * sizeof(uint16);
-    FILESIZE += fwrite("\0\0\0", 1, 3, fid);
+    FILESIZE += fwrite("\0\0\0\0\0\0", 1, 6, fid);
 
     // write materials
     for (int n = 0; n < num_prims; n++) {

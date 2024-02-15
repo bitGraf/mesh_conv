@@ -41,7 +41,7 @@ struct HEADER {
         uint32 Lower;
     } Timestamp;
     uint16 NumPrims;
-    uint8 PADDING[3];
+    uint16 PADDING[3];
 } header<bgcolor=cLtBlue>;
 
 local int num_prims = header.NumPrims;
