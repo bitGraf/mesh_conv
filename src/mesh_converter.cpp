@@ -636,9 +636,10 @@ bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials,
     FILESIZE += fwrite("MESH", 1, 4, fid);
     FILESIZE += fwrite(&filesize_write, sizeof(uint32), 1, fid) * sizeof(uint32);
     FILESIZE += fwrite(&MESH_VERSION, sizeof(uint32), 1, fid) * sizeof(uint32);
-    FILESIZE += fwrite(&timestamp, sizeof(uint64), 1, fid) * sizeof(uint64);
     FILESIZE += fwrite(&flag, sizeof(uint32), 1, fid) * sizeof(uint32);
+    FILESIZE += fwrite(&timestamp, sizeof(uint64), 1, fid) * sizeof(uint64);
     FILESIZE += fwrite(&num_prims, sizeof(uint16), 1, fid) * sizeof(uint16);
+    FILESIZE += fwrite("\0\0\0", 1, 3, fid);
 
     // write materials
     for (int n = 0; n < num_prims; n++) {
@@ -744,10 +745,12 @@ bool32 write_level_file(const std::vector<Mesh>& meshes, const std::vector<Mater
     FILESIZE += fwrite("LEVL", 1, 4, fid);
     FILESIZE += fwrite(&filesize_write, sizeof(uint32), 1, fid) * sizeof(uint32);
     FILESIZE += fwrite(&LEVEL_VERSION, sizeof(uint32), 1, fid) * sizeof(uint32);
-    FILESIZE += fwrite(&timestamp, sizeof(uint64), 1, fid) * sizeof(uint64);
     FILESIZE += fwrite(&flag, sizeof(uint32), 1, fid) * sizeof(uint32);
+    FILESIZE += fwrite(&timestamp, sizeof(uint64), 1, fid) * sizeof(uint64);
     FILESIZE += fwrite(&num_meshes,    sizeof(uint16), 1, fid) * sizeof(uint16);
     FILESIZE += fwrite(&num_materials, sizeof(uint16), 1, fid) * sizeof(uint16);
+    uint32 PADDING = 0;
+    FILESIZE += fwrite(&PADDING, sizeof(uint32), 1, fid) * sizeof(uint32);
 
     for (int n = 0; n < num_meshes; n++) {
         const Mesh& mesh = meshes[n];

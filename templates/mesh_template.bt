@@ -22,26 +22,84 @@ struct vec2 {
     float y;
 };
 
+struct STRING_t {
+    unsigned char len;
+    char str[len];
+};
+
+typedef unsigned int uint32;
+typedef unsigned short uint16;
+typedef unsigned char uint8;
+
 struct HEADER {
     char MAGIC[4];
-    unsigned int FileSize; // filesize in bytes
-    unsigned int flag;
-    char INFO[4];
-    unsigned int numVerts;
-    unsigned int numInds;
-    unsigned short numSubmeshes;
-    struct VER {
-        char v;
-        char vMajor <format=decimal>;
-        char vMinor <format=decimal>;
-        char vRevision <format=decimal>;
-    } version <read=ReadVersionBlock>;
-    struct COMMENT {
-        unsigned short len;
-        string txt;
-    } comment;
-} headerInfo<bgcolor=cLtBlue>;
+    uint32 FileSize; // filesize in bytes
+    uint32 FileVersion;
+    uint32 Flag;
+    struct UINT64_t {
+        uint32 Upper;
+        uint32 Lower;
+    } Timestamp;
+    uint16 NumPrims;
+    uint8 PADDING[3];
+} header<bgcolor=cLtBlue>;
 
+local int num_prims = header.NumPrims;
+local int i;
+
+// Loop through materials
+for (i = 0; i < num_prims; i++) {
+    struct MATERIAL_t {
+        char Magic[4]<bgcolor=cDkRed>;
+        uint32 Flag;
+        
+        vec3 DiffuseFactor;
+        float NormalScale;
+        float AmbientStrength;
+        float MetallicFactor;
+        float RoughnessFactor;
+        vec3 EmissiveFactor;
+        
+        STRING_t mat_name;
+        
+        if (Flag & 0x02) { // has diffuse texture
+            STRING_t DiffuseTexture;
+        }
+        if (Flag & 0x04) { // has normal texture
+            STRING_t NormalTexture;
+        }
+        if (Flag & 0x08) { // has amr texture
+            STRING_t AMRTexture;
+        }
+        if (Flag & 0x10) { // has emissive texture
+            STRING_t EmissiveTexture;
+        }
+    } Material<bgcolor=cLtRed>;
+}
+
+// Loop through primitives
+for (i = 0; i < num_prims; i++) {
+    struct PRIM_t {
+        char Magic[4]<bgcolor=cDkGreen>;
+        uint32 num_verts;
+        uint32 num_inds;
+        uint32 mat_idx;
+        
+        uint32 indices[num_inds];
+        
+        struct VERTEX_t {
+            vec3 position;
+            vec3 normal;
+            vec3 tangent;
+            vec3 bitangent;
+            vec2 uv;
+        } vertices[num_verts];
+    } Primitive<bgcolor=cLtGreen>;
+}
+
+string End;
+
+/*
 // determine flags
 local unsigned int has_animations = headerInfo.flag & 0x01;
 
@@ -148,12 +206,6 @@ if (has_animations) {
 char END[4] <bgcolor=cRed>;
 
 // Custom read functions
-string ReadVersionBlock( VER &d )
-{
-    string str;
-    SPrintf( str, "v%d.%d.%d", d.vMajor, d.vMinor, d.vRevision );
-    return str;
-}
 string ReadVertexBlock( VERTS &v )
 {
     string str;
@@ -196,3 +248,4 @@ string ReadAStr( ASTR &v )
     SPrintf( str, "%s", v.name );
     return str;
 }
+*/
