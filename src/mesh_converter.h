@@ -4,9 +4,21 @@
 #include <laml/laml.hpp>
 #include "utils.h"
 
-struct mesh_conv_opts {
-    real32 sample_rate;
-    bool pack_files;
+enum OperationModeType {
+    HELP_MODE,
+    SINGLE_MESH_MODE,
+    LEVEL_MODE,
 };
 
-bool convert_file(const std::string& input_filename, const std::string& output_filename, const mesh_conv_opts& opts);
+struct Options {
+    OperationModeType mode;
+
+    std::string input_filename;
+    std::string output_folder;
+};
+
+#define TOOL_VERSION "v0.1.0"
+const uint32 MESH_VERSION = 2;
+const uint32 LEVEL_VERSION = 1;
+
+bool convert_file(const Options& opts);

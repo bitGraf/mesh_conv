@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <cstdarg>
+#include <algorithm>
 
 void level_print(int level, const char* format, ...) {
     va_list args;
@@ -83,19 +84,50 @@ namespace utils {
         return false;
     }
 
-    bool decompose_path(const std::string& path, std::string& root_folder, std::string& filename, std::string& extension) {
-        size_t last_slash = path.find_last_of("\\")+1;
-        size_t last_dot = path.find_last_of(".");
-        if (last_dot < last_slash) {
-            // no extension?
-            root_folder = path.substr(0, last_slash);
-            filename = path.substr(last_slash, path.length() - last_slash);
-            extension = std::string();
+    bool decompose_path(const std::string& path_in, std::string& root_folder, std::string& filename, std::string& extension) {
+
+        std::string path = path_in;
+        std::replace(path.begin(), path.end(), '\\', '/');
+
+        bool found_slash = false, found_dot = false;
+
+        size_t last_slash = path.find_last_of("/");
+        if (last_slash == std::string::npos) {
+            last_slash = 0;
         }
         else {
+            found_slash = true;
+            last_slash++;
+        }
+        size_t last_dot = path.find_last_of(".");
+        if (last_dot == std::string::npos) {
+            last_dot = 0;
+        }
+        else {
+            found_dot = true;
+        }
+
+        if (last_dot < last_slash) {
+            found_dot = false;
+        }
+
+        if (found_slash && found_dot) {
             root_folder = path.substr(0, last_slash);
             filename = path.substr(last_slash, last_dot - last_slash);
             extension = path.substr(last_dot, path.length() - last_dot);
+        }
+        else {
+            if (found_dot) {
+                // file.extension
+                root_folder = std::string();
+                filename = path.substr(0, last_dot);
+                extension = path.substr(last_dot, path.length() - last_dot);
+            }
+            else {
+                root_folder = path;
+                filename = std::string();
+                extension = std::string();
+            }
         }
 
         //printf("Input path: [%s]\n", path.c_str());

@@ -13,9 +13,6 @@
 // windows specific
 #include <direct.h>
 
-const uint32 MESH_VERSION = 2;
-const uint32 LEVEL_VERSION = 1;
-
 /****************************************
  * 
  *   MESH
@@ -442,9 +439,9 @@ void traverse_nodes(const tinygltf::Model& gltf_model,
 bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials, const std::string& root_folder);
 bool32 write_level_file(const std::vector<Mesh>& meshes, const std::vector<Material>& materials, const std::string& root_folder);
 
-bool convert_file(const std::string& input_filename, const std::string& output_folder, const mesh_conv_opts& opts) {
+bool convert_file(const Options& opts) {
     printf("----------------Loading------------------\n");
-    printf("Loading file: '%s'\n", input_filename.c_str());
+    printf("Loading file: '%s'\n", opts.input_filename.c_str());
 
     tinygltf::Model gltf_model;
     tinygltf::TinyGLTF gltf_loader;
@@ -452,13 +449,13 @@ bool convert_file(const std::string& input_filename, const std::string& output_f
     std::string warn;
         
     std::string rf, fn, ext;
-    utils::decompose_path(input_filename, rf, fn, ext);
+    utils::decompose_path(opts.input_filename, rf, fn, ext);
     printf("filename: %s\n", fn.c_str());
     bool ret = false;
     if (ext == ".glb") {
-        ret = gltf_loader.LoadBinaryFromFile(&gltf_model, &err, &warn, input_filename);
+        ret = gltf_loader.LoadBinaryFromFile(&gltf_model, &err, &warn, opts.input_filename);
     } else if (ext == ".gltf") {
-        ret = gltf_loader.LoadASCIIFromFile(&gltf_model, &err, &warn, input_filename);
+        ret = gltf_loader.LoadASCIIFromFile(&gltf_model, &err, &warn, opts.input_filename);
     } else {
         printf("Unknown file extension: [%s]\n", ext.c_str());
     }
@@ -513,8 +510,11 @@ bool convert_file(const std::string& input_filename, const std::string& output_f
 
     // Write each render mesh to its own file
     printf("Writing mesh files...\n");
-    _mkdir(output_folder.c_str());
-    std::string mesh_folder = output_folder + '\\' + "render_meshes";
+    _mkdir(opts.output_folder.c_str());
+    std::string mesh_folder = opts.output_folder;
+    if (opts.mode == LEVEL_MODE) {
+        mesh_folder = mesh_folder + '\\' + "render_meshes";
+    }
     _mkdir(mesh_folder.c_str());
     std::unordered_set<std::string> written_meshes; // to catch duplicates
     for (int n = 0; n < extracted_meshes.size(); n++) {
@@ -538,7 +538,10 @@ bool convert_file(const std::string& input_filename, const std::string& output_f
 
     // Write collision meshes to files
     printf("Writing collider files...\n");
-    std::string collision_folder = output_folder + '\\' + "collision_meshes";
+    std::string collision_folder = opts.output_folder;
+    if (opts.mode == LEVEL_MODE) {
+        collision_folder = collision_folder + '\\' + "collision_meshes";
+    }
     _mkdir(collision_folder.c_str());
     written_meshes.clear(); // to catch duplicates
     for (int n = 0; n < extracted_meshes.size(); n++) {
@@ -561,15 +564,18 @@ bool convert_file(const std::string& input_filename, const std::string& output_f
     printf("Wrote %d files.\n", (int)written_meshes.size());
     printf("-----------------------------------------\n");
 
-    // Write meshes and materials to level file
-    printf("Writing level file: '%s'...", fn.c_str());
-    if (write_level_file(extracted_meshes, extracted_materials, output_folder + '\\' + fn)) {
-        printf("done!\n");
-    } else {
-        printf("failed!\n");
-        bool32 success = false;
+    // Write mesh paths to level file
+    if (opts.mode == LEVEL_MODE) {
+        printf("Writing level file: '%s'...", fn.c_str());
+        if (write_level_file(extracted_meshes, extracted_materials, opts.output_folder + '\\' + fn)) {
+            printf("done!\n");
+        }
+        else {
+            printf("failed!\n");
+            bool32 success = false;
+        }
+        printf("-----------------------------------------\n");
     }
-    printf("-----------------------------------------\n");
 
     //printf("Checking transforms...\n");
     //for (int n = 0; n < extracted_meshes.size(); n++) {
