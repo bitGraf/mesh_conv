@@ -214,6 +214,10 @@ void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_
         tinygltf::Primitive prim = gltf_mesh.primitives[n];
         assert(prim.mode == TINYGLTF_MODE_TRIANGLES);
 
+        for (const auto& key : prim.attributes) {
+            printf("->'%s'\n", key.first.c_str());
+        }
+
         // determine missing attributes
         if (!has_attribute(prim, "POSITION")) {
             printf("[ERROR]  primitive is missing vertex positions!!!\n");
@@ -436,8 +440,13 @@ void traverse_nodes(const tinygltf::Model& gltf_model,
 
 
 
-bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials, const std::string& root_folder);
-bool32 write_level_file(const std::vector<Mesh>& meshes, const std::vector<Material>& materials, const std::string& root_folder);
+bool32 write_mesh_file(const Mesh& mesh, 
+                       const std::vector<Material>& materials, 
+                       const std::string& root_folder,
+                       const Options& opts);
+bool32 write_level_file(const std::vector<Mesh>& meshes, 
+                        const std::vector<Material>& materials, 
+                        const std::string& root_folder);
 
 bool convert_file(const Options& opts) {
     printf("----------------Loading------------------\n");
@@ -524,7 +533,7 @@ bool convert_file(const Options& opts) {
 
         if (written_meshes.find(mesh.mesh_name) == written_meshes.end()) {
             printf("  Writing mesh %2d: '%s.mesh'...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str());
-            if (write_mesh_file(mesh, extracted_materials, mesh_folder)) {
+            if (write_mesh_file(mesh, extracted_materials, mesh_folder, opts)) {
                 printf("done!\n");
             } else {
                 printf("failed!\n");
@@ -551,7 +560,7 @@ bool convert_file(const Options& opts) {
 
         if (written_meshes.find(mesh.mesh_name) == written_meshes.end()) {
             printf("  Writing mesh %2d: '%s.mesh'...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str());
-            if (write_mesh_file(mesh, extracted_materials, collision_folder)) {
+            if (write_mesh_file(mesh, extracted_materials, collision_folder, opts)) {
                 printf("done!\n");
             }
             else {
@@ -609,7 +618,11 @@ size_t write_string(FILE* fid, const std::string& string) {
     return written;
 }
 
-bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials, const std::string& mesh_folder) {
+bool32 write_mesh_file(const Mesh& mesh, 
+    const std::vector<Material>& materials, 
+    const std::string& mesh_folder, 
+    const Options& opts) {
+
     std::string filename = mesh_folder + '\\' + mesh.mesh_name + ".mesh";
 
     // Open and check for valid file
@@ -704,7 +717,12 @@ bool32 write_mesh_file(const Mesh& mesh, const std::vector<Material>& materials,
             FILESIZE += fwrite(&bitangent.x, sizeof(real32), 3, fid) * sizeof(real32);
 
             // flip y uv-coord
-            real32 y = 1.0f - prim.texcoords[i].y;
+            real32 y;
+            if (opts.flip_uvs_y) {
+                y = 1.0f - prim.texcoords[i].y;
+            } else {
+                y = prim.texcoords[i].y;
+            }
             FILESIZE += fwrite(&prim.texcoords[i].x, sizeof(real32), 1, fid) * sizeof(real32);
             FILESIZE += fwrite(&y,                   sizeof(real32), 1, fid) * sizeof(real32);
             //FILESIZE += fwrite(&vert.tex.x,       sizeof(f32), 2, fid) * sizeof(f32);

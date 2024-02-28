@@ -5,7 +5,7 @@
 
 //printf("usage: mesh_conv [-v | --version] [-h] [-f input.gltf] [-o output/folder] [-fps 30]\n");
 const char* usage_string =
-"usage: mesh_conv [-v | --version] [-h | --help] <mode> input_filename [-o path/to/output]\n"
+"usage: mesh_conv [-v | --version] [-h | --help] <mode> input_filename [-o path/to/output] [-flip-uv]\n"
 "\n"
 "modes:\n"
 "    mesh:  simply extracts meshes from the input and writes them to the output directory\n"
@@ -101,6 +101,13 @@ int main(int argc, char** argv) {
         opt.output_folder = folder + filename;
     }
     std::replace(opt.output_folder.begin(), opt.output_folder.end(), '/', '\\');
+
+    if (utils::cmdOptionExists(argv, argv + argc, "-flip-uv")) {
+        printf("  flipping UV y-coordinates\n");
+        opt.flip_uvs_y = true;
+    } else {
+        opt.flip_uvs_y = false;
+    }
 
     // print options
     printf("  input_filename: %s\n", opt.input_filename.c_str());

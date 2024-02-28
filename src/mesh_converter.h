@@ -15,9 +15,11 @@ struct Options {
 
     std::string input_filename;
     std::string output_folder;
+
+    bool flip_uvs_y;
 };
 
-#define TOOL_VERSION "v0.1.0"
+#define TOOL_VERSION "v0.1.1"
 const uint32 MESH_VERSION = 2;
 const uint32 LEVEL_VERSION = 1;
 
