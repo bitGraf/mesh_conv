@@ -8,6 +8,7 @@ enum OperationModeType {
     HELP_MODE,
     SINGLE_MESH_MODE,
     LEVEL_MODE,
+    DISPLAY_MODE,
 };
 
 struct Options {
@@ -19,8 +20,9 @@ struct Options {
     bool flip_uvs_y;
 };
 
-#define TOOL_VERSION "v0.1.1"
+#define TOOL_VERSION "v0.1.2"
 const uint32 MESH_VERSION = 2;
 const uint32 LEVEL_VERSION = 1;
 
 bool convert_file(const Options& opts);
+bool display_contents(const Options& opts);

@@ -12,7 +12,9 @@ const char* usage_string =
 "\n"
 "    level: extracts meshes and writes a .level file containing a catalog of\n"
 "           of meshes (both renderable and colliders), while writing those\n"
-"           .mesh files to separate folders.\n";
+"           .mesh files to separate folders.\n"
+"\n"
+"    disp: loads a .mesh or .level file and print the contents to the console\n";
 
 int main(int argc, char** argv) {
     //printf("-------------------------------------------------\n");
@@ -31,7 +33,7 @@ int main(int argc, char** argv) {
 
     // print tool version
     if (utils::cmdOptionExists(argv, argv + argc, "-v") || utils::cmdOptionExists(argv, argv + argc, "--version")) {
-        printf("mesh_conv Version %s  (mesh %d)  (level %d)\n", TOOL_VERSION, MESH_VERSION, LEVEL_VERSION);
+        printf("mesh_conv Version %s  (mesh v%d)  (level v%d)\n", TOOL_VERSION, MESH_VERSION, LEVEL_VERSION);
         return 0;
     }
 
@@ -46,8 +48,10 @@ int main(int argc, char** argv) {
         // full level conversion mode
         opt.mode = LEVEL_MODE;
         printf("Outputting scene as .level file\n");
-    }
-    else {
+    } else if (strcmp(mode_str, "disp") == 0) {
+        // print out the contents of a file
+        opt.mode = DISPLAY_MODE;
+    } else {
         printf("Incorrect mode!\n");
         printf("%s\n", usage_string);
         return 0;
@@ -111,14 +115,19 @@ int main(int argc, char** argv) {
 
     // print options
     printf("  input_filename: %s\n", opt.input_filename.c_str());
-    printf("  output_folder:  %s\n", opt.output_folder.c_str());
 
-    // Run the actual conversion
-    if (!convert_file(opt)) {
-        printf("Failed to succesfully convert file!\n");
-    }
-    else {
-        printf("Succesfully converted file!\n");
+    if (opt.mode == DISPLAY_MODE) {
+        // display contents of file
+        display_contents(opt);
+    } else {
+        printf("  output_folder:  %s\n", opt.output_folder.c_str());
+        // Run the actual conversion
+        if (!convert_file(opt)) {
+            printf("Failed to succesfully convert file!\n");
+        }
+        else {
+            printf("Succesfully converted file!\n");
+        }
     }
 
     return 0;

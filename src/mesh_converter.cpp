@@ -800,3 +800,351 @@ bool32 write_level_file(const std::vector<Mesh>& meshes, const std::vector<Mater
 
     return true;
 }
+
+
+// print contents of file
+void display_mesh_file(const Options& opts);
+void display_level_file(const Options& opts);
+bool display_contents(const Options& opts) {
+    printf("----------------Loading------------------\n");
+    printf("Loading file: '%s'\n", opts.input_filename.c_str());
+
+    std::string rf, fn, ext;
+    utils::decompose_path(opts.input_filename, rf, fn, ext);
+    printf("filename: %s\n", (fn+ext).c_str());
+    bool ret = false;
+    if (ext == ".mesh") {
+        display_mesh_file(opts);
+    } else if (ext == ".level") {
+        display_level_file(opts);
+    } else {
+        printf("Unknown file extension: [%s]\n", ext.c_str());
+    }
+
+    return true;
+}
+
+#define read_multi(var,n) fread(var, sizeof(var[0]), n, fid);
+#define read_single(var)  fread(&var, sizeof(var), 1, fid);
+
+void print_color(float* color, char* fmt, ...);
+
+void display_mesh_file(const Options& opts) {
+    FILE* fid = fopen(opts.input_filename.c_str(), "rb");
+    if (fid == nullptr) {
+        printf("[ERROR] Failed to open file [%s]\n", opts.input_filename.c_str());
+        return;
+    }
+
+    std::vector<std::string> mat_names;
+
+    fseek(fid, 0L, SEEK_END);
+    size_t real_filesize = ftell(fid);
+
+    fseek(fid, 0L, SEEK_SET);
+
+    char MAGIC[5] = { 0 };
+    read_multi(MAGIC, 4);
+    //printf("MAGIC = [%s]\n", MAGIC);
+    if (strcmp(MAGIC, "MESH")) {
+        printf("[ERROR] ill-formed .mesh file\n");
+        goto exit;
+    }
+
+    uint32 filesize;
+    read_single(filesize);
+    if ((uint32)real_filesize != filesize) {
+        printf("[ERROR] File is %zd bytes, file says its %d bytes...\n", real_filesize, filesize);
+        goto exit;
+    }
+
+    uint32 file_version;
+    read_single(file_version);
+
+    uint32 flag;
+    read_single(flag);
+
+    uint64 timestamp;
+    read_single(timestamp);
+    
+    struct tm* time_info;
+    char timeString[32] = { 0 };
+    time_info = localtime((time_t*)(&timestamp));
+    strftime(timeString, sizeof(timeString), "%c", time_info);
+
+    uint16 num_prims;
+    read_single(num_prims);
+    if (num_prims > 1000) { //  just in case
+        printf("[ERROR] header not read properly.\n");
+        goto exit;
+    }
+    mat_names.resize(num_prims);
+
+    uint16 PADDING[3];
+    read_multi(PADDING, 3);
+
+
+    printf("Filesize: %zd bytes\n", real_filesize);
+    printf("Mesh version: %d\n", file_version);
+    printf("Flag = %d\n", flag);
+    printf("File generated on: %s\n", timeString);
+    printf("-----------------------------------------\n");
+
+    // read materials
+    printf("%d Materials\n", num_prims);
+    for (int n = 0; n < num_prims; n++) {
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "MATL")) {
+            printf("  [ERROR] ill-formed .mesh file\n");
+            goto exit;
+        }
+
+        uint32 mat_flag;
+        read_single(mat_flag);
+
+        real32 DiffuseFactor[3];
+        read_multi(DiffuseFactor, 3);
+
+        real32 NormalScale;
+        read_single(NormalScale);
+
+        real32 AmbientStrength;
+        read_single(AmbientStrength);
+
+        real32 MetallicFactor;
+        read_single(MetallicFactor);
+
+        real32 RoughnessFactor;
+        read_single(RoughnessFactor);
+
+        real32 EmissiveFactor[3];
+        read_multi(EmissiveFactor, 3);
+
+        char mat_name[1024] = { 0 };
+        char d_name[1024] = { 0 };
+        char n_name[1024] = { 0 };
+        char a_name[1024] = { 0 };
+        char e_name[1024] = { 0 };
+
+
+        uint8 name_len;
+        read_single(name_len);
+        read_multi(mat_name, name_len);
+        mat_names[n] = std::string(mat_name);
+
+        // load optional textures
+        if (mat_flag & 0x02) {
+            read_single(name_len);
+            read_multi(d_name, name_len);
+        }
+        if (mat_flag & 0x04) {
+            read_single(name_len);
+            read_multi(n_name, name_len);
+        }
+        if (mat_flag & 0x08) {
+            read_single(name_len);
+            read_multi(a_name, name_len);
+        }
+        if (mat_flag & 0x10) {
+            read_single(name_len);
+            read_multi(e_name, name_len);
+        }
+
+        // print out data
+        printf("  Material %d: %s\n", n, mat_name);
+        printf("    Flag = %d (", mat_flag);
+        if (mat_flag & 0x02) printf("has_diffuse ");
+        if (mat_flag & 0x04) printf("has_normal ");
+        if (mat_flag & 0x08) printf("has_amr ");
+        if (mat_flag & 0x10) printf("has_emissive ");
+        printf(")\n");
+
+        printf("    Diffuse:   ");
+        print_color(DiffuseFactor, "[%.2f %.2f %.2f]", DiffuseFactor[0], DiffuseFactor[1], DiffuseFactor[2]);
+        if (mat_flag & 0x02) printf(" - '%s'", d_name);
+        printf("\n");
+
+        printf("    Normal:          %.2f", NormalScale);
+        if (mat_flag & 0x04) printf("       - '%s'", n_name);
+        printf("\n");
+
+        printf("    Ambient:         %.2f", AmbientStrength);
+        if (mat_flag & 0x08) printf("       - '%s'", a_name);
+        printf("\n");
+
+        printf("    Metallic:        %.2f", MetallicFactor);
+        if (mat_flag & 0x08) printf("       - '%s'", a_name);
+        printf("\n");
+
+        printf("    Roughness:       %.2f", RoughnessFactor);
+        if (mat_flag & 0x08) printf("       - '%s'", a_name);
+        printf("\n");
+
+        printf("    Emissive:  ");
+        print_color(EmissiveFactor, "[%.2f %.2f %.2f]", EmissiveFactor[0], EmissiveFactor[1], EmissiveFactor[2]);
+        if (mat_flag & 0x10) printf(" - '%s'", e_name);
+        printf("\n");
+
+        if (n < (num_prims-1))
+            printf("\n");
+    }
+
+    // read primitives
+    printf("-----------------------------------------\n");
+    printf("%d Primitives\n", num_prims);
+    for (int n = 0; n < num_prims; n++) {
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "PRIM")) {
+            printf("  [ERROR] ill-formed .mesh file\n");
+            goto exit;
+        }
+
+        uint32 num_verts;
+        read_single(num_verts);
+        uint32 num_indices;
+        read_single(num_indices);
+        uint32 mat_idx;
+        read_single(mat_idx);
+
+
+        fseek(fid, sizeof(uint32)*num_indices, SEEK_CUR);
+        fseek(fid, 14*sizeof(real32)*num_verts, SEEK_CUR);
+
+        printf("  Primitive %d:\n", n);
+        printf("    %d vertices\n", num_verts);
+        printf("    %d indices\n", num_indices);
+        printf("    Material %d (%s)\n", mat_idx, mat_names[mat_idx].c_str());
+        if (n < (num_prims - 1))
+            printf("\n");
+    }
+
+    read_multi(MAGIC, 4);
+
+    if (strcmp(MAGIC, "END")) {
+        printf("[ERROR] ill-formed .mesh file\n");
+        goto exit;
+    }
+
+    printf("-----------------------------------------\n");
+
+exit:
+    fclose(fid);
+    return;
+}
+void display_level_file(const Options& opts) {
+    FILE* fid = fopen(opts.input_filename.c_str(), "rb");
+    if (fid == nullptr) {
+        printf("[ERROR] Failed to open file [%s]\n", opts.input_filename.c_str());
+        return;
+    }
+
+    fseek(fid, 0L, SEEK_END);
+    size_t real_filesize = ftell(fid);
+    fseek(fid, 0L, SEEK_SET);
+
+    char MAGIC[5] = { 0 };
+    read_multi(MAGIC, 4);
+    //printf("MAGIC = [%s]\n", MAGIC);
+    if (strcmp(MAGIC, "LEVL")) {
+        printf("[ERROR] ill-formed .level file\n");
+        goto exit;
+    }
+
+    uint32 filesize;
+    read_single(filesize);
+    if ((uint32)real_filesize != filesize) {
+        printf("[ERROR] File is %zd bytes, file says its %d bytes...\n", real_filesize, filesize);
+        goto exit;
+    }
+
+    uint32 file_version;
+    read_single(file_version);
+
+    uint32 flag;
+    read_single(flag);
+
+    uint64 timestamp;
+    read_single(timestamp);
+
+    struct tm* time_info;
+    char timeString[32] = { 0 };
+    time_info = localtime((time_t*)(&timestamp));
+    strftime(timeString, sizeof(timeString), "%c", time_info);
+
+    uint16 num_meshes, num_materials;
+    read_single(num_meshes);
+    read_single(num_materials);
+
+    uint32 PADDING;
+    read_single(PADDING);
+
+    // print data
+    printf("Filesize: %zd bytes\n", real_filesize);
+    printf("Level version: %d\n", file_version);
+    printf("Flag = %d\n", flag);
+    printf("File generated on: %s\n", timeString);
+    printf("-----------------------------------------\n");
+
+    printf("%d Meshes\n", num_meshes);
+    for (int n = 0; n < num_meshes; n++) {
+        real32 Transform[16];
+        read_multi(Transform, 16);
+
+        bool32 is_collider;
+        read_single(is_collider);
+
+        char name[1024] = { 0 };
+        char mesh_name[1024] = { 0 };
+        uint8 name_len;
+
+        read_single(name_len);
+        read_multi(name, name_len);
+
+        read_single(name_len);
+        read_multi(mesh_name, name_len);
+
+        // print
+        printf("  Mesh %d - %s\n", n, is_collider ? "collider" : "renderable");
+        printf("    %s | %s\n", name, mesh_name);
+        printf("    Transform [%.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f]\n",
+            Transform[0], Transform[1], Transform[2], Transform[3],
+            Transform[4], Transform[5], Transform[6], Transform[7],
+            Transform[8], Transform[9], Transform[10], Transform[11],
+            Transform[12], Transform[13], Transform[14], Transform[15]);
+    }
+    printf("-----------------------------------------\n");
+
+    read_multi(MAGIC, 4);
+    if (strcmp(MAGIC, "END")) {
+        printf("[ERROR] ill-formed .level file\n");
+        goto exit;
+    }
+
+exit:
+    fclose(fid);
+    return;
+}
+
+void print_color(float* color, char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+
+    const size_t bufsize = 1024;
+    char buf[bufsize];
+    vsnprintf(buf, bufsize, fmt, args);
+
+    va_end(args);
+
+    float rf = color[0];
+    float gf = color[1];
+    float bf = color[2];
+
+    unsigned char r = (rf * 255.0f);
+    unsigned char g = (gf * 255.0f);
+    unsigned char b = (bf * 255.0f);
+
+    printf("\033[48;2;%d;%d;%dm", 50, 50, 50);
+    printf("\033[38;2;%d;%d;%dm%s\033[0m", r, g, b, buf);
+}
