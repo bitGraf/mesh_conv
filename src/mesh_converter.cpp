@@ -214,9 +214,9 @@ void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_
         tinygltf::Primitive prim = gltf_mesh.primitives[n];
         assert(prim.mode == TINYGLTF_MODE_TRIANGLES);
 
-        for (const auto& key : prim.attributes) {
-            printf("->'%s'\n", key.first.c_str());
-        }
+        //for (const auto& key : prim.attributes) {
+        //    printf("->'%s'\n", key.first.c_str());
+        //}
 
         // determine missing attributes
         if (!has_attribute(prim, "POSITION")) {
