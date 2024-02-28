@@ -5,7 +5,7 @@
 
 //printf("usage: mesh_conv [-v | --version] [-h] [-f input.gltf] [-o output/folder] [-fps 30]\n");
 const char* usage_string =
-"usage: mesh_conv [-v | --version] [-h | --help] <mode> input_filename [-o path/to/output] [-flip-uv]\n"
+"usage: meshconv [-v | --version] [-h | --help] <mode> input_filename [-o path/to/output] [-flip-uv]\n"
 "\n"
 "modes:\n"
 "    mesh:  simply extracts meshes from the input and writes them to the output directory\n"
