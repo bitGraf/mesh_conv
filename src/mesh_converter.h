@@ -21,8 +21,15 @@ struct Options {
 };
 
 #define TOOL_VERSION "v0.1.2"
-const uint32 MESH_VERSION = 2;
+const uint32 MESH_VERSION = 3;
+/* Mesh Version 3:
+ *      -Added support for skinned meshes. This adds new vertex attributes, and so changes the size of the primitive data block
+ */
+
 const uint32 LEVEL_VERSION = 1;
+
+const uint32 mesh_flag_is_rigged   = 0x01; // 1
+const uint32 mesh_flag_is_collider = 0x02; // 2
 
 bool convert_file(const Options& opts);
 bool display_contents(const Options& opts);

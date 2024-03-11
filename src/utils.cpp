@@ -10,7 +10,8 @@ void level_print(int level, const char* format, ...) {
     va_start(args, format);
 
     for (int n = 0; n < level; n++) {
-        printf(" \371 ");
+        //printf(" \371 ");
+        printf(" - ");
     }
 
     vprintf(format, args);

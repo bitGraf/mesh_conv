@@ -21,115 +21,44 @@ struct vec2 {
     float x;
     float y;
 };
-
 struct STRING_t {
     unsigned char len;
     char str[len];
 };
 
-typedef unsigned int uint32;
-typedef unsigned short uint16;
-typedef unsigned char uint8;
-
-struct HEADER {
+struct HEADER_t {
     char MAGIC[4];
-    uint32 FileSize; // filesize in bytes
-    uint32 FileVersion;
-    uint32 Flag;
+    unsigned int FileSize; // filesize in bytes
+    unsigned int Version;
+    unsigned int Flag;
     struct UINT64_t {
-        uint32 Upper;
-        uint32 Lower;
+        unsigned int Upper;
+        unsigned int Lower;
     } Timestamp;
-    uint16 NumPrims;
-    uint16 PADDING[3];
-} header<bgcolor=cLtBlue>;
+    //unsigned long Timestamp;
+    unsigned short NumMeshes;
+    unsigned short NumMaterials;
+    unsigned int PADDING;
+} Header<bgcolor=cLtBlue>;
 
-local int num_prims = header.NumPrims;
+local unsigned int num_entries = Header.NumMeshes;
 local int i;
-local int is_skinned = header.Flag & 0x01;
 
-// Loop through materials
-for (i = 0; i < num_prims; i++) {
-    struct MATERIAL_t {
-        char Magic[4]<bgcolor=cDkRed>;
-        uint32 Flag;
+for (i = 0; i < num_entries; i++) {
+    struct ENTRY_t {
+        float Transform[16];
+        unsigned int IsCollider;
         
-        vec3 DiffuseFactor;
-        float NormalScale;
-        float AmbientStrength;
-        float MetallicFactor;
-        float RoughnessFactor;
-        vec3 EmissiveFactor;
-        
-        STRING_t mat_name<read=ReadAString>;
-        
-        if (Flag & 0x02) { // has diffuse texture
-            STRING_t DiffuseTexture<read=ReadAString>;
-        }
-        if (Flag & 0x04) { // has normal texture
-            STRING_t NormalTexture<read=ReadAString>;
-        }
-        if (Flag & 0x08) { // has amr texture
-            STRING_t AMRTexture<read=ReadAString>;
-        }
-        if (Flag & 0x10) { // has emissive texture
-            STRING_t EmissiveTexture<read=ReadAString>;
-        }
-    } Material<bgcolor=cLtRed>;
-}
-
-// Loop through primitives
-for (i = 0; i < num_prims; i++) {
-    struct PRIM_t {
-        char Magic[4]<bgcolor=cDkGreen>;
-        uint32 num_verts;
-        uint32 num_inds;
-        uint32 mat_idx;
-        
-        uint32 indices[num_inds];
-        
-        if (is_skinned) {
-            struct SKINNED_VERTEX_t {
-                vec3 position;
-                vec3 normal;
-                vec3 tangent;
-                vec3 bitangent;
-                vec2 uv;
-                ivec4 bone_idx;
-                vec4  bone_weights;
-            } vertices[num_verts];
-        } else {
-            struct VERTEX_t {
-                vec3 position;
-                vec3 normal;
-                vec3 tangent;
-                vec3 bitangent;
-                vec2 uv;
-            } vertices[num_verts];
-        }
-    } Primitive<bgcolor=cLtGreen>;
-}
-
-// Check if theres a skeleton
-if (is_skinned) {
-    struct SKELETON_T {
-        char Magic[4];
-        uint32 num_bones;
-        
-        struct BONE_t {
-            uint32 bone_idx;
-            int32  parent_idx;
-            float  debug_length;
-            float  local_matrix[16];
-            float  inv_model_matrix[16];
-            STRING_t bone_name<read=ReadAString>;
-        } bones[num_bones]<optimize=false,read=ReadABone>;
-    } Skeleton<bgcolor=cWhite>;
+        STRING_t Name<read=ReadAString>;
+        STRING_t MeshName<read=ReadAString>;
+    };
+    if(i % 2 == 0)
+        ENTRY_t entry<bgcolor=cLtGreen,read=ReadAEntry>;
+    else
+        ENTRY_t entry<bgcolor=cDkGreen,read=ReadAEntry>;
 }
 
 string End;
-
-
 
 string ReadAString( STRING_t &v ) 
 {
@@ -137,10 +66,10 @@ string ReadAString( STRING_t &v )
     SPrintf( str, "%s", v.str );
     return str;
 }
-string ReadABone( BONE_t &v ) 
+string ReadAEntry( ENTRY_t &v ) 
 {
     string str;
-    SPrintf( str, "%s", v.bone_name.str );
+    SPrintf( str, "%s|%s", v.Name.str, v.MeshName.str );
     return str;
 }
 
@@ -251,6 +180,12 @@ if (has_animations) {
 char END[4] <bgcolor=cRed>;
 
 // Custom read functions
+string ReadVersionBlock( VER &d )
+{
+    string str;
+    SPrintf( str, "v%d.%d.%d", d.vMajor, d.vMinor, d.vRevision );
+    return str;
+}
 string ReadVertexBlock( VERTS &v )
 {
     string str;

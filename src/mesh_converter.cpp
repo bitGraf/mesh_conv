@@ -26,16 +26,34 @@ struct Mesh_Primitive {
     std::vector<laml::Vec3> normals;
     std::vector<laml::Vec2> texcoords;
     std::vector<laml::Vec4> tangents_4;
+
+    std::vector<laml::Vec4> bone_weights;
+    std::vector<laml::Vector<int32, 4>> bone_indices;
+};
+struct Bone {
+    int32 parent_idx; // so -1 can be the root idx
+    laml::Mat4 local_matrix;
+    laml::Mat4 inv_model_matrix;
+
+    std::string name;
+    uint32 node_idx;
+    uint32 bone_idx;
+};
+struct Skeleton {
+    std::vector<Bone> bones;
 };
 struct Mesh {
     laml::Mat4 transform;
 
     bool32 is_rigged;
+    bool32 is_collider;
+
     std::string mesh_name;
     std::string name;
+
     std::vector<Mesh_Primitive> primitives;
 
-    bool32 is_collider;
+    Skeleton skeleton;
 };
 
 /****************************************
@@ -188,10 +206,10 @@ std::vector<Element_Type> extract_accessor(const tinygltf::Model& tinyModel, int
     return elements;
 }
 
-void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_mesh, Mesh& mesh, int level) {
+void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_mesh, Mesh& mesh, bool has_skin, int level) {
     int num_primitives = gltf_mesh.primitives.size();
     mesh.primitives.resize(num_primitives);
-    mesh.is_rigged = false;
+    mesh.is_rigged = has_skin;
     mesh.mesh_name = gltf_mesh.name;
 
     tinygltf::Value extras = gltf_mesh.extras;
@@ -251,6 +269,22 @@ void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_
         mesh.primitives[n].normals = extract_accessor<laml::Vec3, real32>(gltf_model, prim.attributes["NORMAL"],     level + 1);
         mesh.primitives[n].tangents_4 = extract_accessor<laml::Vec4, real32>(gltf_model, prim.attributes["TANGENT"],    level + 1);
         mesh.primitives[n].texcoords = extract_accessor<laml::Vec2, real32>(gltf_model, prim.attributes["TEXCOORD_0"], level + 1);
+
+        // check for skinning data if skinned
+        if (has_skin) {
+            // determine missing attributes
+            if (!has_attribute(prim, "JOINTS_0")) {
+                printf("[WARNING]  primitive is missing bone indices!!!\n");
+                assert(false);
+            }
+            if (!has_attribute(prim, "WEIGHTS_0")) {
+                printf("[ERROR]  primitive is missing bone weights!!!\n");
+                assert(false);
+            }
+
+            mesh.primitives[n].bone_weights = extract_accessor<laml::Vec4, real32>(gltf_model, prim.attributes["WEIGHTS_0"], level + 1);
+            mesh.primitives[n].bone_indices = extract_accessor<laml::Vector<int32,4>, int32>(gltf_model, prim.attributes["JOINTS_0"], level + 1);
+        }
     }
 }
 
@@ -389,6 +423,53 @@ laml::Mat4 get_node_local_transform(const tinygltf::Node& node) {
     return transform;
 }
 
+void traverse_bones(const tinygltf::Model& gltf_model,
+                    const tinygltf::Node& gltf_joint,
+                    std::vector<Bone>& out_bones,
+                    laml::Mat4& parent_transform,
+                    int32 parent_idx,
+                    uint32 node_idx,
+                    int level) {
+
+    uint32 num_children = gltf_joint.children.size();
+    //level_print(level, "[%s] (%d children)\n", gltf_joint.name.c_str(), num_children);
+    
+    Bone new_bone;
+    new_bone.name = gltf_joint.name;
+    new_bone.local_matrix = get_node_local_transform(gltf_joint);
+    laml::Mat4 model_matrix = laml::mul(parent_transform, new_bone.local_matrix);
+    new_bone.inv_model_matrix = laml::inverse(model_matrix);
+    new_bone.parent_idx = parent_idx;
+
+    int32 bone_idx = out_bones.size();
+    assert((parent_idx < bone_idx) && "Bone processed before its parent!");
+    new_bone.bone_idx = bone_idx;
+    new_bone.node_idx = node_idx;
+    out_bones.push_back(new_bone);
+
+
+    for (uint32 n = 0; n < num_children; n++) {
+        const tinygltf::Node& child = gltf_model.nodes[gltf_joint.children[n]];
+
+        uint32 child_idx = gltf_joint.children[n];
+        traverse_bones(gltf_model, child, out_bones, model_matrix, bone_idx, child_idx, level + 1);
+    }
+}
+
+void extract_bind_pose(const tinygltf::Model& gltf_model, const tinygltf::Skin& gltf_skin, Mesh& mesh, int level) {
+    std::vector<Bone> bones;
+    const tinygltf::Node& root_joint = gltf_model.nodes[gltf_skin.joints[0]];
+    if (root_joint.name != "root") {
+        level_print(level, "[WARNING] root joint [%s] is not named 'root'\n", root_joint.name.c_str());
+    }
+    traverse_bones(gltf_model, root_joint, bones, laml::Mat4(1.0f), -1, gltf_skin.joints[0], level + 1);
+
+    uint32 num_joints = gltf_skin.joints.size();
+    level_print(level+1, "Found %d/%d bones!\n", bones.size(), num_joints);
+
+    mesh.skeleton.bones = bones;
+}
+
 void traverse_nodes(const tinygltf::Model& gltf_model, 
                     const tinygltf::Node& gltf_node, 
                     std::vector<Mesh>& out_meshes, 
@@ -417,10 +498,15 @@ void traverse_nodes(const tinygltf::Model& gltf_model,
         //mesh.local_matrix = node_local_transform;
         mesh.transform = node_world_transform;
         mesh.name = gltf_node.name;
-        process_mesh(gltf_model, gltf_model.meshes[gltf_node.mesh], mesh, level + 1);
+        process_mesh(gltf_model, gltf_model.meshes[gltf_node.mesh], mesh, has_skin, level + 1);
 
         if (has_skin) {
             level_print(level + 1, "NOT SUPPORTED RIGHT NOW!!\n");
+
+            const tinygltf::Skin& gltf_skin = gltf_model.skins[gltf_node.skin];
+            level_print(level + 1, "Skeleton: '%s' (%d bones)\n", gltf_skin.name.c_str(), gltf_skin.joints.size());
+
+            extract_bind_pose(gltf_model, gltf_skin, mesh, level+1);
             //process_anim_mesh(gltf_model, gltf_model.meshes[gltf_node.mesh], mesh, level + 1);
             //Skeleton skeleton;
             //process_skin(gltf_model, gltf_model.skins[gltf_node.skin], skeleton, level + 1);
@@ -532,7 +618,7 @@ bool convert_file(const Options& opts) {
         if (mesh.is_collider) continue;
 
         if (written_meshes.find(mesh.mesh_name) == written_meshes.end()) {
-            printf("  Writing mesh %2d: '%s.mesh'...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str());
+            printf("  Writing mesh %2d: '%s.mesh' [v%d]...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str(), MESH_VERSION);
             if (write_mesh_file(mesh, extracted_materials, mesh_folder, opts)) {
                 printf("done!\n");
             } else {
@@ -559,7 +645,7 @@ bool convert_file(const Options& opts) {
         if (!mesh.is_collider) continue;
 
         if (written_meshes.find(mesh.mesh_name) == written_meshes.end()) {
-            printf("  Writing mesh %2d: '%s.mesh'...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str());
+            printf("  Writing mesh %2d: '%s.mesh' [v%d]...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str(), MESH_VERSION);
             if (write_mesh_file(mesh, extracted_materials, collision_folder, opts)) {
                 printf("done!\n");
             }
@@ -575,7 +661,7 @@ bool convert_file(const Options& opts) {
 
     // Write mesh paths to level file
     if (opts.mode == LEVEL_MODE) {
-        printf("Writing level file: '%s'...", fn.c_str());
+        printf("Writing level file: '%s' [v%d]...", fn.c_str(), LEVEL_VERSION);
         if (write_level_file(extracted_meshes, extracted_materials, opts.output_folder + '\\' + fn)) {
             printf("done!\n");
         }
@@ -642,10 +728,9 @@ bool32 write_mesh_file(const Mesh& mesh,
 
     // construct options flag
     uint32 flag = 0;
-    const uint32 flag_is_rigged = 0x01; // 1
         
     if (mesh.is_rigged)
-        flag |= flag_is_rigged;
+        flag |= mesh_flag_is_rigged;
 
     uint64 timestamp = (uint64)time(NULL);
 
@@ -726,6 +811,35 @@ bool32 write_mesh_file(const Mesh& mesh,
             FILESIZE += fwrite(&prim.texcoords[i].x, sizeof(real32), 1, fid) * sizeof(real32);
             FILESIZE += fwrite(&y,                   sizeof(real32), 1, fid) * sizeof(real32);
             //FILESIZE += fwrite(&vert.tex.x,       sizeof(f32), 2, fid) * sizeof(f32);
+
+            // only write bone data if rigged
+            if (mesh.is_rigged) {
+                FILESIZE += fwrite(&prim.bone_indices[i].x, sizeof(int32),  4, fid) * sizeof(int32);
+                FILESIZE += fwrite(&prim.bone_weights[i].x, sizeof(real32), 4, fid) * sizeof(real32);
+            }
+        }
+    }
+
+    // Write the skeleton if mesh is rigged
+    // same skeleton for all prims?
+    if (mesh.is_rigged) {
+        const Skeleton& skeleton = mesh.skeleton;
+        uint32 num_bones = skeleton.bones.size();
+
+        FILESIZE += fwrite("SKEL", 1, 4, fid);
+        FILESIZE += fwrite(&num_bones, sizeof(uint32), 1, fid) * sizeof(uint32);
+
+        real32 debug_length = 1.0f;
+        for (uint32 bone_idx = 0; bone_idx < num_bones; bone_idx++) {
+            const Bone& bone = skeleton.bones[bone_idx];
+
+            FILESIZE += fwrite(&bone.bone_idx, sizeof(uint32), 1, fid) * sizeof(uint32);
+            FILESIZE += fwrite(&bone.parent_idx, sizeof(int32), 1, fid) * sizeof(int32);
+            FILESIZE += fwrite(&debug_length, sizeof(real32), 1, fid) * sizeof(real32);
+            FILESIZE += fwrite(&bone.local_matrix.c_11, sizeof(real32), 16, fid) * sizeof(real32);
+            FILESIZE += fwrite(&bone.inv_model_matrix.c_11, sizeof(real32), 16, fid) * sizeof(real32);
+
+            FILESIZE += write_string(fid, bone.name);
         }
     }
 
@@ -847,7 +961,7 @@ void display_mesh_file(const Options& opts) {
     read_multi(MAGIC, 4);
     //printf("MAGIC = [%s]\n", MAGIC);
     if (strcmp(MAGIC, "MESH")) {
-        printf("[ERROR] ill-formed .mesh file\n");
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", MESH_VERSION);
         goto exit;
     }
 
@@ -886,7 +1000,10 @@ void display_mesh_file(const Options& opts) {
 
     printf("Filesize: %zd bytes\n", real_filesize);
     printf("Mesh version: %d\n", file_version);
-    printf("Flag = %d\n", flag);
+    printf("Flag = %d (", flag);
+    if (flag & mesh_flag_is_rigged)   printf("is_rigged ");
+    if (flag & mesh_flag_is_collider) printf("is_collider ");
+    printf(")\n", flag);
     printf("File generated on: %s\n", timeString);
     printf("-----------------------------------------\n");
 
@@ -896,7 +1013,7 @@ void display_mesh_file(const Options& opts) {
         read_multi(MAGIC, 4);
 
         if (strcmp(MAGIC, "MATL")) {
-            printf("  [ERROR] ill-formed .mesh file\n");
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", MESH_VERSION);
             goto exit;
         }
 
@@ -997,7 +1114,7 @@ void display_mesh_file(const Options& opts) {
         read_multi(MAGIC, 4);
 
         if (strcmp(MAGIC, "PRIM")) {
-            printf("  [ERROR] ill-formed .mesh file\n");
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", MESH_VERSION);
             goto exit;
         }
 
@@ -1010,7 +1127,8 @@ void display_mesh_file(const Options& opts) {
 
 
         fseek(fid, sizeof(uint32)*num_indices, SEEK_CUR);
-        fseek(fid, 14*sizeof(real32)*num_verts, SEEK_CUR);
+        uint32 attribute_size = (flag & mesh_flag_is_rigged) ? 22 : 14;
+        fseek(fid, attribute_size*sizeof(real32)*num_verts, SEEK_CUR);
 
         printf("  Primitive %d:\n", n);
         printf("    %d vertices\n", num_verts);
@@ -1020,10 +1138,55 @@ void display_mesh_file(const Options& opts) {
             printf("\n");
     }
 
+    // read skeleton
+    if (flag & mesh_flag_is_rigged) {
+        printf("-----------------------------------------\n");
+        printf("Skeleton\n");
+
+        read_multi(MAGIC, 4);
+        if (strcmp(MAGIC, "SKEL")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", MESH_VERSION);
+            goto exit;
+        }
+
+        uint32 num_bones;
+        read_single(num_bones);
+
+        printf("%d bones\n", num_bones);
+        for (int n = 0; n < num_bones; n++) {
+
+            uint32 bone_idx;
+            read_single(bone_idx);
+
+            int32 parent_idx;
+            read_single(parent_idx);
+
+            real32 debug_length;
+            read_single(debug_length);
+
+            real32 local_matrix[16];
+            read_multi(local_matrix, 16);
+
+            real32 inv_model_matrix[16];
+            read_multi(local_matrix, 16);
+
+            uint8 name_len;
+            char bone_name[1024] = { 0 };
+            read_single(name_len);
+            read_multi(bone_name, name_len);
+
+            printf("  %2d %2d %-20s [", bone_idx, parent_idx, bone_name);
+            for (uint32 i = 0; i < 16; i++) {
+                printf("%5.2f ", local_matrix[i]);
+            }
+            printf("]\n");
+        }
+    }
+
     read_multi(MAGIC, 4);
 
     if (strcmp(MAGIC, "END")) {
-        printf("[ERROR] ill-formed .mesh file\n");
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", MESH_VERSION);
         goto exit;
     }
 
