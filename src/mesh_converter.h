@@ -9,6 +9,7 @@ enum OperationModeType {
     SINGLE_MESH_MODE,
     LEVEL_MODE,
     DISPLAY_MODE,
+    UPGRADE_MODE,
 };
 
 struct Options {
@@ -31,5 +32,12 @@ const uint32 LEVEL_VERSION = 1;
 const uint32 mesh_flag_is_rigged   = 0x01; // 1
 const uint32 mesh_flag_is_collider = 0x02; // 2
 
+const uint32 mat_flag_double_sided = 0x01; // 1
+const uint32 mat_flag_has_diffuse  = 0x02; // 2
+const uint32 mat_flag_has_normal   = 0x04; // 4
+const uint32 mat_flag_has_amr      = 0x08; // 8
+const uint32 mat_flag_has_emissive = 0x10; // 16
+
 bool convert_file(const Options& opts);
 bool display_contents(const Options& opts);
+bool upgrade_file(const Options& opts);

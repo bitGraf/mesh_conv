@@ -1311,3 +1311,268 @@ void print_color(float* color, char* fmt, ...) {
     printf("\033[48;2;%d;%d;%dm", 50, 50, 50);
     printf("\033[38;2;%d;%d;%dm%s\033[0m", r, g, b, buf);
 }
+
+
+// print contents of file
+void upgrade_mesh_file(const Options& opts);
+void upgrade_level_file(const Options& opts);
+bool upgrade_file(const Options& opts) {
+    printf("----------------Upgrading------------------\n");
+    printf("Loading file: '%s'\n", opts.input_filename.c_str());
+
+    std::string rf, fn, ext;
+    utils::decompose_path(opts.input_filename, rf, fn, ext);
+    printf("filename: %s\n", (fn + ext).c_str());
+    bool ret = false;
+    if (ext == ".mesh") {
+        upgrade_mesh_file(opts);
+    }
+    else if (ext == ".level") {
+        upgrade_level_file(opts);
+    }
+    else {
+        printf("Unknown file extension: [%s]\n", ext.c_str());
+    }
+
+    printf("-----------------------------------------\n");
+    return true;
+}
+
+void read_mesh_v2(FILE* fid, Mesh& mesh, std::vector<Material>& materials) {
+    fseek(fid, 0L, SEEK_END);
+    size_t real_filesize = ftell(fid);
+
+    fseek(fid, 0L, SEEK_SET);
+
+    char MAGIC[5] = { 0 };
+    read_multi(MAGIC, 4);
+    if (strcmp(MAGIC, "MESH")) {
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", 2);
+        return;
+    }
+
+    uint32 filesize;
+    read_single(filesize);
+    if ((uint32)real_filesize != filesize) {
+        printf("[ERROR] File is %zd bytes, file says its %d bytes...\n", real_filesize, filesize);
+        return;
+    }
+
+    uint32 file_version;
+    read_single(file_version);
+
+    uint32 flag;
+    read_single(flag);
+    mesh.is_collider = flag & mesh_flag_is_collider;
+    mesh.is_rigged = false; // v2 did not support skeletons yet
+
+    uint64 timestamp;
+    read_single(timestamp);
+
+    struct tm* time_info;
+    char timeString[32] = { 0 };
+    time_info = localtime((time_t*)(&timestamp));
+    strftime(timeString, sizeof(timeString), "%c", time_info);
+
+    uint16 num_prims;
+    read_single(num_prims);
+    if (num_prims > 1000) { //  just in case
+        printf("[ERROR] header not read properly.\n");
+        return;
+    }
+
+    uint16 PADDING[3];
+    read_multi(PADDING, 3);
+
+    mesh.primitives.resize(num_prims);
+    materials.resize(num_prims);
+
+    // read materials
+    for (int n = 0; n < num_prims; n++) {
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "MATL")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 2);
+            return;
+        }
+
+        uint32 mat_flag;
+        read_single(mat_flag);
+        materials[n].double_sided         = mat_flag & mat_flag_double_sided;
+        materials[n].diffuse_has_texture  = mat_flag & mat_flag_has_diffuse;
+        materials[n].normal_has_texture   = mat_flag & mat_flag_has_normal;
+        materials[n].amr_has_texture      = mat_flag & mat_flag_has_amr;
+        materials[n].emissive_has_texture = mat_flag & mat_flag_has_emissive;
+
+        read_multi(materials[n].diffuse_factor._data, 3);
+        read_single(materials[n].normal_scale);
+        read_single(materials[n].ambient_strength);
+        read_single(materials[n].metallic_factor);
+        read_single(materials[n].roughness_factor);
+        read_multi(materials[n].emissive_factor._data, 3);
+
+        char mat_name[1024] = { 0 };
+        char d_name[1024] = { 0 };
+        char n_name[1024] = { 0 };
+        char a_name[1024] = { 0 };
+        char e_name[1024] = { 0 };
+
+
+        uint8 name_len;
+        read_single(name_len);
+        read_multi(mat_name, name_len);
+        materials[n].name = std::string(mat_name);
+
+        // load optional textures
+        if (mat_flag & 0x02) {
+            read_single(name_len);
+            read_multi(d_name, name_len);
+            materials[n].diffuse_texture = std::string(d_name);
+        }
+        if (mat_flag & 0x04) {
+            read_single(name_len);
+            read_multi(n_name, name_len);
+            materials[n].normal_texture = std::string(n_name);
+        }
+        if (mat_flag & 0x08) {
+            read_single(name_len);
+            read_multi(a_name, name_len);
+            materials[n].amr_texture = std::string(a_name);
+        }
+        if (mat_flag & 0x10) {
+            read_single(name_len);
+            read_multi(e_name, name_len);
+            materials[n].emissive_texture = std::string(e_name);
+        }
+    }
+
+    // read primitives
+    for (int n = 0; n < num_prims; n++) {
+        Mesh_Primitive& prim = mesh.primitives[n];
+
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "PRIM")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 2);
+            return;
+        }
+
+        uint32 num_verts;
+        read_single(num_verts);
+        prim.positions.resize(num_verts);
+        prim.normals.resize(num_verts);
+        prim.tangents_4.resize(num_verts);
+        prim.texcoords.resize(num_verts);
+
+        uint32 num_indices;
+        read_single(num_indices);
+        prim.indices.resize(num_indices);
+
+        uint32 mat_idx;
+        read_single(mat_idx);
+        prim.material_index = mat_idx;
+
+        fread(prim.indices.data(), sizeof(uint32), num_indices, fid);
+        //fseek(fid, sizeof(uint32) * num_indices, SEEK_CUR);
+
+        for (uint32 i = 0; i < num_verts; i++) {
+            fread(&prim.positions[i], sizeof(real32), 3, fid);
+            fread(&prim.normals[i], sizeof(real32), 3, fid);
+
+            laml::Vec3 tangent, bitangent, normal;
+            fread(&tangent, sizeof(real32), 3, fid);
+            fread(&bitangent, sizeof(real32), 3, fid);
+            normal = laml::cross(tangent, bitangent);
+            if (laml::abs(laml::dot(normal, prim.normals[i])) < laml::eps<real32>) {
+                prim.tangents_4[i] = laml::Vec4(tangent.x, tangent.y, tangent.z,  1.0f);
+            } else {
+                prim.tangents_4[i] = laml::Vec4(tangent.x, tangent.y, tangent.z, -1.0f);
+            }
+
+            fread(&prim.texcoords[i], sizeof(real32), 2, fid);
+        }
+    }
+
+    read_multi(MAGIC, 4);
+
+    if (strcmp(MAGIC, "END")) {
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", 2);
+        return;
+    }
+}
+void upgrade_mesh_file(const Options& opts) {
+    Mesh mesh;
+    std::vector<Material> materials;
+    std::string rf, fn, ext;
+
+    FILE* fid = fopen(opts.input_filename.c_str(), "rb");
+    if (fid == nullptr) {
+        printf("[ERROR] Failed to open file [%s]\n", opts.input_filename.c_str());
+        return;
+    }
+
+    fseek(fid, 0L, SEEK_END);
+    size_t real_filesize = ftell(fid);
+
+    fseek(fid, 0L, SEEK_SET);
+
+    char MAGIC[5] = { 0 };
+    read_multi(MAGIC, 4);
+    //printf("MAGIC = [%s]\n", MAGIC);
+    if (strcmp(MAGIC, "MESH")) {
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", MESH_VERSION);
+        goto exit;
+    }
+
+    uint32 filesize;
+    read_single(filesize);
+    if ((uint32)real_filesize != filesize) {
+        printf("[ERROR] File is %zd bytes, file says its %d bytes...\n", real_filesize, filesize);
+        goto exit;
+    }
+
+    uint32 file_version;
+    read_single(file_version);
+
+    fseek(fid, 0L, SEEK_SET);
+
+    printf("Existing mesh file version: %d\n", file_version);
+    if (file_version == MESH_VERSION) {
+        printf("  Already at max version.\n");
+        goto exit;
+    }
+    printf("-----------------------------------------\n");
+
+    utils::decompose_path(opts.input_filename, rf, fn, ext);
+    mesh.mesh_name = fn;
+    mesh.name = "<" + mesh.mesh_name + ">";
+    mesh.transform = laml::Mat4(1.0f);
+
+    switch (file_version) {
+        case 0: {printf("Cannot handle v0 files.\n"); goto exit; } break;
+        case 1: {printf("Cannot handle v1 files.\n"); goto exit; } break;
+        case 2: { 
+            printf("Copying file %s to %s_v2\n", opts.input_filename.c_str(), opts.input_filename.c_str());
+            CopyFile(opts.input_filename.c_str(), (opts.input_filename + "_v2").c_str(), false);
+            printf("Reading file as v2 mesh...");
+            read_mesh_v2(fid, mesh, materials); 
+            printf("done!\n");
+        } break;
+    }
+    fclose(fid);
+
+    printf("Writing new v%d file...", MESH_VERSION);
+    write_mesh_file(mesh, materials, ".", opts);
+    printf("done!\n");
+
+    return;
+
+exit:
+    fclose(fid);
+    return;
+}
+void upgrade_level_file(const Options& opts) {
+
+
+    return;
+}

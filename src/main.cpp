@@ -14,7 +14,9 @@ const char* usage_string =
 "           of meshes (both renderable and colliders), while writing those\n"
 "           .mesh files to separate folders.\n"
 "\n"
-"    disp: loads a .mesh or .level file and print the contents to the console\n";
+"    disp: loads a .mesh or .level file and print the contents to the console\n"
+"\n"
+"    upgrade: loads a .mesh or .level file and upgrades it to the newest version (if possible)\n";
 
 int main(int argc, char** argv) {
     //printf("-------------------------------------------------\n");
@@ -51,6 +53,9 @@ int main(int argc, char** argv) {
     } else if (strcmp(mode_str, "disp") == 0) {
         // print out the contents of a file
         opt.mode = DISPLAY_MODE;
+    } else if (strcmp(mode_str, "upgrade") == 0) {
+        // upgrade a files version
+        opt.mode = UPGRADE_MODE;
     } else {
         printf("Incorrect mode!\n");
         printf("%s\n", usage_string);
@@ -119,6 +124,9 @@ int main(int argc, char** argv) {
     if (opt.mode == DISPLAY_MODE) {
         // display contents of file
         display_contents(opt);
+    } else if (opt.mode == UPGRADE_MODE) {
+        // upgrade file
+        upgrade_file(opt);
     } else {
         printf("  output_folder:  %s\n", opt.output_folder.c_str());
         // Run the actual conversion
