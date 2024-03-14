@@ -10,13 +10,16 @@ const char* usage_string =
 "modes:\n"
 "    mesh:  simply extracts meshes from the input and writes them to the output directory\n"
 "\n"
+"    anim:  extracts all animations from the input and writes them to the output directory\n"
+"\n"
 "    level: extracts meshes and writes a .level file containing a catalog of\n"
 "           of meshes (both renderable and colliders), while writing those\n"
 "           .mesh files to separate folders.\n"
 "\n"
 "    disp: loads a .mesh or .level file and print the contents to the console\n"
 "\n"
-"    upgrade: loads a .mesh or .level file and upgrades it to the newest version (if possible)\n";
+"    upgrade: loads a .mesh or .level file and upgrades it to the newest version (if possible)\n"
+"\n";
 
 int main(int argc, char** argv) {
     //printf("-------------------------------------------------\n");
@@ -46,6 +49,10 @@ int main(int argc, char** argv) {
         // single mesh conversion mode
         opt.mode = SINGLE_MESH_MODE;
         printf("Creating a single .mesh file\n");
+    } else if (strcmp(mode_str, "anim") == 0) {
+        // full level conversion mode
+        opt.mode = ANIM_MODE;
+        printf("Outputting scene as .level file\n");
     } else if (strcmp(mode_str, "level") == 0) {
         // full level conversion mode
         opt.mode = LEVEL_MODE;
@@ -127,10 +134,20 @@ int main(int argc, char** argv) {
     } else if (opt.mode == UPGRADE_MODE) {
         // upgrade file
         upgrade_file(opt);
-    } else {
+    } else if (opt.mode == SINGLE_MESH_MODE) {
         printf("  output_folder:  %s\n", opt.output_folder.c_str());
+
         // Run the actual conversion
         if (!convert_file(opt)) {
+            printf("Failed to succesfully convert file!\n");
+        } else {
+            printf("Succesfully converted file!\n");
+        }
+    } else if (opt.mode == ANIM_MODE) {
+        printf("  output_folder:  %s\n", opt.output_folder.c_str());
+
+        // Run the actual conversion
+        if (!extract_anims(opt)) {
             printf("Failed to succesfully convert file!\n");
         }
         else {

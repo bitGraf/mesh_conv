@@ -1,24 +1,3 @@
-//------------------------------------------------
-//--- 010 Editor v13.0.1 Binary Template
-//
-//      File: 
-//   Authors: 
-//   Version: 
-//   Purpose: 
-//  Category: 
-// File Mask: 
-//  ID Bytes: 
-//   History: 
-//------------------------------------------------
-//------------------------------------------------
-//--- 010 Editor v6.0 Binary Template
-//
-//      File: Tutorial.bt
-//   Authors: SweetScape Software
-//   Version: 1.1
-//   Purpose: Part of the tutorial for 
-//            learning to write binary templates. 
-//------------------------------------------------
 LittleEndian();
 
 struct vec4 { 
@@ -43,83 +22,186 @@ struct vec2 {
     float y;
 };
 
+struct STRING_t {
+    unsigned char len;
+    char str[len];
+};
+
+typedef unsigned int   uint32;
+typedef unsigned short uint16;
+typedef unsigned char  uint8;
+
 struct HEADER {
     char MAGIC[4];
-    unsigned int FileSize; // filesize in bytes
-    struct VER {
-        char v;
-        char vMajor <format=decimal>;
-        char vMinor <format=decimal>;
-        char vRevision <format=decimal>;
-    } version <read=ReadVersionBlock>;
-    unsigned int flag;
-    float duration;
-    float frame_rate;
-    unsigned int num_nodes;
-    unsigned int num_samples;
-} headerInfo<bgcolor=cLtBlue>;
+    uint32 FileSize; // filesize in bytes
+    uint32 FileVersion;
+    uint32 Flag;
+    struct UINT64_t {
+        uint32 Upper;
+        uint32 Lower;
+    } Timestamp;
+    uint16 NumBones;
+    uint16 NumSamples;
+    float  FrameRate;
+} header<bgcolor=cLtBlue>;
 
-struct TransKey {
-    float FrameTime;
-    vec3 Value <read=ReadVec3>;
-};
-struct RotKey {
-    float FrameTime;
-    vec4 Value <read=ReadVec4>;
-};
-struct ScaleKey {
-    float FrameTime;
-    vec3 Value <read=ReadVec3>;
-};
+local int num_bones = header.NumBones;
+local int num_samples = header.NumSamples;
+local int i;
 
-local int i, j;
-
-struct DataBlock {
-    char MAGIC[4];
-    for(j = 0; j < headerInfo.num_nodes; j++) {
-        struct NODE {
-            unsigned int node_flag;
+// Get skeleton heirarchy
+struct SKELETON_T {
+    char Magic[4];
+    uint16 num_bones;
     
-            struct Translations {
-                for (i = 0; i < headerInfo.num_samples; i++) {
-                    if (i % 2 == 0) {
-                        vec3 translations<bgcolor=cLtGreen,read=ReadVec3>;
-                    } else {
-                        vec3 translations<bgcolor=cDkGreen,read=ReadVec3>;
-                    }
-                }
-            } translations;
+    struct BONE_t {
+        uint16 bone_idx;
+        int16  parent_idx;
+    } bones[num_bones]<optimize=false,read=ReadABone>;
+} Skeleton<bgcolor=cWhite>;
 
-            struct Rotations {
-                for (i = 0; i < headerInfo.num_samples; i++) {
-                    if (i % 2 == 0) {
-                        vec4 rotations<bgcolor=cLtGreen,read=ReadVec4>;
-                    } else {
-                        vec4 rotations<bgcolor=cDkGreen,read=ReadVec4>;
-                    }
-                }
-            } rotations;
+struct BONEANIM_T {
+    char MAGIC[4];
+    float translation[3*num_samples];
+    float rotation[4*num_samples];
+    float scale[3*num_samples];
+    
+} Bones[num_bones]<optimize=false, bgcolor=cDkRed>;
 
-            struct Scales {
-                for (i = 0; i < headerInfo.num_samples; i++) {
-                    if (i % 2 == 0) {
-                        vec3 scales<bgcolor=cLtGreen>;
-                    } else {
-                        vec3 scales<bgcolor=cDkGreen>;
-                    }
-                }
-            } scales;
-        } node;
+string End;
+
+
+
+string ReadAString( STRING_t &v ) 
+{
+    string str;
+    SPrintf( str, "%s", v.str );
+    return str;
+}
+string ReadABone( BONE_t &v ) 
+{
+    string str;
+    SPrintf( str, "%d|%d", v.bone_idx, v.parent_idx );
+    return str;
+}
+
+/*
+// determine flags
+local unsigned int has_animations = headerInfo.flag & 0x01;
+
+// Loop through submeshes now
+local int i;
+for (i = 0; i < headerInfo.numSubmeshes; i++) {
+    struct SUBMESH {
+        string tag<bgcolor=cDkRed>;
+        unsigned int startIndex;
+        unsigned int materialIndex;
+        unsigned int numIndices;
+        float transform[16];
+    } submesh<bgcolor=cLtRed>;
+}
+
+struct Mat4x4 {
+    vec4 col1 <read=ReadVec4>;
+    vec4 col2 <read=ReadVec4>;
+    vec4 col3 <read=ReadVec4>;
+    vec4 col4 <read=ReadVec4>;
+};
+
+// Read bone heirarchy if has_animations
+struct JOINT {
+    unsigned short name_len;
+    char name[name_len];
+    int parent_idx;
+    Mat4x4 Local_Matrix;
+    Mat4x4 Inv_Model_Matrix;
+};
+struct JOINTS {
+    char BONE[4];
+    unsigned short num_bones;
+
+    for (i = 0; i < num_bones; i++) {
+        JOINT joint;
     }
-} dataBlock;//<bgcolor=cLtGreen>;
+};
+if (has_animations) {
+    JOINTS joints;
+}
+
+// DATA SECTION
+// Loop through verts now
+
+struct STAT_VERT {
+    vec3 Position <read=ReadVec3>;
+    vec3 Normal <read=ReadVec3>;
+    vec3 Tangent <read=ReadVec3>;
+    vec3 Bitangent <read=ReadVec3>;
+    vec2 Tex <read=ReadVec2>;
+};
+
+struct ANIM_VERT {
+    vec3 Position <read=ReadVec3>;
+    vec3 Normal <read=ReadVec3>;
+    vec3 Tangent <read=ReadVec3>;
+    vec3 Bitangent <read=ReadVec3>;
+    vec2 Tex <read=ReadVec2>;
+    ivec4 Bones <read=ReadIVec4>;
+    vec4 Weights <read=ReadVec4>;
+};
+
+struct DATA {
+    char DATA[4];
+    struct INDS {
+        char TAG[4]<bgcolor=cDkGreen>;
+        for (i = 0; i < headerInfo.numInds; i++) {
+            unsigned int index;
+        }
+    } indexBlock <read=ReadIndexBlock>;
+    struct VERTS {
+        char TAG[4]<bgcolor=cDkGreen>;
+        for (i = 0; i < headerInfo.numVerts; i++) {
+            if (has_animations) {
+                if(i % 2 == 0)
+                    ANIM_VERT vert<bgcolor=cLtGreen>;
+                else
+                    ANIM_VERT vert<bgcolor=cDkGreen>;
+            } else {
+                if(i % 2 == 0)
+                    STAT_VERT vert<bgcolor=cLtGreen>;
+                else
+                    STAT_VERT vert<bgcolor=cDkGreen>;
+            }
+        }
+    } vertBlock <read=ReadVertexBlock>;
+} dataBlock<bgcolor=cLtGreen>;
+
+if (has_animations) {
+    struct ANIMS {
+        char MAGIC[4];
+        unsigned short num_anims;
+        
+        for (i = 0; i < num_anims; i++) {
+            struct ASTR {
+                unsigned short name_len;
+                char name[name_len];
+            } name <read=ReadAStr>;
+        }
+    } anims;
+}
 
 char END[4] <bgcolor=cRed>;
 
 // Custom read functions
-string ReadVersionBlock( VER &d )
+string ReadVertexBlock( VERTS &v )
 {
     string str;
-    SPrintf( str, "v%d.%d.%d", d.vMajor, d.vMinor, d.vRevision );
+    SPrintf( str, "%i vertices", headerInfo.numVerts );
+    return str;
+}
+string ReadIndexBlock( INDS &v )
+{
+    string str;
+    SPrintf( str, "%i indices", headerInfo.numInds );
     return str;
 }
 string ReadVec4( vec4 &v )
@@ -146,49 +228,10 @@ string ReadVec2( vec2 &v )
     SPrintf( str, "[%.2f,%.2f]", v.x, v.y );
     return str;
 }
-
-/*
-struct HEADER {
-    int fileID <format=hex>;
-    float version;
-    int blockOffset[4];
-    string description;
-    if( version > 3.0 )
-        int extraData;
-} headerInfo <bgcolor=cLtBlue>;
-
-// Pre-reading data using ReadInt
-struct OPTION1 { int tag; uchar data[8]; };
-struct OPTION2 { int tag; uint64 data; };
-if( ReadInt( FTell() ) == 1 )
-    struct OPTION1 opt1;
-else
-    struct OPTION2 opt2;
-
-// Duplicate array
-double value;
-double value;
-double value;
-
-// Out-of-order reading using FSeek
-local int pos;
-local int i;
-struct DATABLOCK {
-    int dataID;
-    uchar dataArray[16];
-};
-pos = FTell(); // save read position
-for( i = 0; i < 4; i++ ) {
-    FSeek( headerInfo.blockOffset[i] );
-    DATABLOCK data <read=ReadDataBlock>;
-}
-FSeek( pos );  // restore read position
-
-// Custom read function
-string ReadDataBlock( DATABLOCK &d )
+string ReadAStr( ASTR &v )
 {
     string str;
-    SPrintf( str, "ID = '%d'", d.dataID );
+    SPrintf( str, "%s", v.name );
     return str;
 }
 */
