@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
 
     // print tool version
     if (utils::cmdOptionExists(argv, argv + argc, "-v") || utils::cmdOptionExists(argv, argv + argc, "--version")) {
-        printf("mesh_conv Version %s  (mesh v%d)  (level v%d)\n", TOOL_VERSION, MESH_VERSION, LEVEL_VERSION);
+        printf("mesh_conv Version %s  (mesh v%d) (anim v%d) (level v%d)\n", TOOL_VERSION, MESH_VERSION, ANIM_VERSION, LEVEL_VERSION);
         return 0;
     }
 
