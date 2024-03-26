@@ -20,13 +20,16 @@ struct Options {
     std::string output_folder;
 
     bool flip_uvs_y;
+    float frame_rate;
 };
 
-#define TOOL_VERSION "v0.1.4"
+#define TOOL_VERSION "v0.1.5"
 /* Mesh Version 3:
  *      -Added support for skinned meshes. This adds new vertex attributes, and so changes the size of the primitive data block
+ * Mesh Version 4:
+ *      -Added support for Line primitives. Adds a new parameter to each primitive indicating the type.
  */
-const uint32 MESH_VERSION = 3;
+const uint32 MESH_VERSION = 4;
 const uint32 ANIM_VERSION = 1;
 const uint32 LEVEL_VERSION = 1;
 
@@ -51,9 +54,15 @@ bool upgrade_file(const Options& opts);
  *
  *   MESH
  *
- * ************************************/
+ ****************************************/
+enum class prim_type : uint32 {
+    NONE = 0,
+    triangles = 1,
+    lines = 2
+};
 struct Mesh_Primitive {
     int32 material_index;
+    prim_type prim_type;
     std::vector<uint32> indices;
 
     std::vector<laml::Vec3> positions;

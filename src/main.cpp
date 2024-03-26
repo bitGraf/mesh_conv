@@ -5,7 +5,7 @@
 
 //printf("usage: mesh_conv [-v | --version] [-h] [-f input.gltf] [-o output/folder] [-fps 30]\n");
 const char* usage_string =
-"usage: meshconv [-v | --version] [-h | --help] <mode> input_filename [-o path/to/output] [-flip-uv]\n"
+"usage: meshconv [-v | --version] [-h | --help] <mode> input_filename [-o path/to/output] [-flip-uv] [-fps 30]\n"
 "\n"
 "modes:\n"
 "    mesh:  simply extracts meshes from the input and writes them to the output directory\n"
@@ -123,6 +123,14 @@ int main(int argc, char** argv) {
         opt.flip_uvs_y = true;
     } else {
         opt.flip_uvs_y = false;
+    }
+
+    opt.frame_rate = 30.0;
+    char* fps_str = utils::getCmdOption(argv, argv + argc, "-fps");
+    if (fps_str) {
+        double fps = std::atof(fps_str);
+        if (fps != 0.0)
+            opt.frame_rate = fps;
     }
 
     // print options

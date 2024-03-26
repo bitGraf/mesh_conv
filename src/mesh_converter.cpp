@@ -159,61 +159,69 @@ void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_
 
     for (int n = 0; n < num_primitives; n++) {
         tinygltf::Primitive prim = gltf_mesh.primitives[n];
-        assert(prim.mode == TINYGLTF_MODE_TRIANGLES);
 
-        //for (const auto& key : prim.attributes) {
-        //    printf("->'%s'\n", key.first.c_str());
-        //}
-
-        // determine missing attributes
         if (!has_attribute(prim, "POSITION")) {
             printf("[ERROR]  primitive is missing vertex positions!!!\n");
-            assert(false);
-        }
-        if (!has_attribute(prim, "NORMAL")) {
-            printf("[WARNING]  primitive is missing normals\n");
-            assert(false);
-        }
-        if (!has_attribute(prim, "TANGENT")) {
-            printf("[WARNING]  primitive is missing tangents\n");
-            assert(false);
-        }
-        if (!has_attribute(prim, "TEXCOORD_0")) {
-            printf("[WARNING]  primitive is missing uv-coords\n");
             assert(false);
         }
 
         mesh.primitives[n].material_index = prim.material;
 
-        //log_print(level, " Extracting mesh indices!\n");
         mesh.primitives[n].indices = extract_accessor<uint32, uint32>(gltf_model, prim.indices, level + 1);
+        mesh.primitives[n].positions = extract_accessor<laml::Vec3, real32>(gltf_model, prim.attributes["POSITION"], level + 1);
 
-        //log_print(level, " Extracting static mesh attributes!\n");
-        mesh.primitives[n].positions = extract_accessor<laml::Vec3, real32>(gltf_model, prim.attributes["POSITION"],   level + 1);
-            
-        //mesh.primitives[n].normals.resize(mesh.primitives[n].positions.size());
-        //mesh.primitives[n].tangents.resize(mesh.primitives[n].positions.size());
-        //mesh.primitives[n].texcoords.resize(mesh.primitives[n].positions.size());
+        mesh.primitives[n].prim_type = prim_type::NONE;
+        if (prim.mode == TINYGLTF_MODE_TRIANGLES) {
+            mesh.primitives[n].prim_type = prim_type::triangles;
 
-        mesh.primitives[n].normals = extract_accessor<laml::Vec3, real32>(gltf_model, prim.attributes["NORMAL"],     level + 1);
-        mesh.primitives[n].tangents_4 = extract_accessor<laml::Vec4, real32>(gltf_model, prim.attributes["TANGENT"],    level + 1);
-        mesh.primitives[n].texcoords = extract_accessor<laml::Vec2, real32>(gltf_model, prim.attributes["TEXCOORD_0"], level + 1);
-
-        // check for skinning data if skinned
-        if (has_skin) {
             // determine missing attributes
-            if (!has_attribute(prim, "JOINTS_0")) {
-                printf("[WARNING]  primitive is missing bone indices!!!\n");
+            if (!has_attribute(prim, "NORMAL")) {
+                printf("[WARNING]  primitive is missing normals\n");
                 assert(false);
             }
-            if (!has_attribute(prim, "WEIGHTS_0")) {
-                printf("[ERROR]  primitive is missing bone weights!!!\n");
+            if (!has_attribute(prim, "TANGENT")) {
+                printf("[WARNING]  primitive is missing tangents\n");
+                assert(false);
+            }
+            if (!has_attribute(prim, "TEXCOORD_0")) {
+                printf("[WARNING]  primitive is missing uv-coords\n");
                 assert(false);
             }
 
-            mesh.primitives[n].bone_weights = extract_accessor<laml::Vec4, real32>(gltf_model, prim.attributes["WEIGHTS_0"], level + 1);
-            mesh.primitives[n].bone_indices = extract_accessor<laml::Vector<int32,4>, int32>(gltf_model, prim.attributes["JOINTS_0"], level + 1);
+            mesh.primitives[n].normals = extract_accessor<laml::Vec3, real32>(gltf_model, prim.attributes["NORMAL"], level + 1);
+            mesh.primitives[n].tangents_4 = extract_accessor<laml::Vec4, real32>(gltf_model, prim.attributes["TANGENT"], level + 1);
+            mesh.primitives[n].texcoords = extract_accessor<laml::Vec2, real32>(gltf_model, prim.attributes["TEXCOORD_0"], level + 1);
+
+            // check for skinning data if skinned
+            if (has_skin) {
+                // determine missing attributes
+                if (!has_attribute(prim, "JOINTS_0")) {
+                    printf("[WARNING]  primitive is missing bone indices!!!\n");
+                    assert(false);
+                }
+                if (!has_attribute(prim, "WEIGHTS_0")) {
+                    printf("[ERROR]  primitive is missing bone weights!!!\n");
+                    assert(false);
+                }
+
+                mesh.primitives[n].bone_weights = extract_accessor<laml::Vec4, real32>(gltf_model, prim.attributes["WEIGHTS_0"], level + 1);
+                mesh.primitives[n].bone_indices = extract_accessor<laml::Vector<int32, 4>, int32>(gltf_model, prim.attributes["JOINTS_0"], level + 1);
+            }
+        } else if (prim.mode == TINYGLTF_MODE_LINE) {
+            mesh.primitives[n].prim_type = prim_type::lines;
+
+            // determine missing attributes
+            if (!has_attribute(prim, "NORMAL")) {
+                printf("[WARNING]  primitive is missing normals\n");
+            }
+            if (!has_attribute(prim, "TANGENT")) {
+                printf("[WARNING]  primitive is missing tangents\n");
+            }
+            if (!has_attribute(prim, "TEXCOORD_0")) {
+                printf("[WARNING]  primitive is missing uv-coords\n");
+            }
         }
+        assert(mesh.primitives[n].prim_type != prim_type::NONE);
     }
 }
 
@@ -395,6 +403,14 @@ void extract_bind_pose(const tinygltf::Model& gltf_model, const tinygltf::Skin& 
 
     uint32 num_joints = gltf_skin.joints.size();
     level_print(level+1, "Found %d/%d bones!\n", bones.size(), num_joints);
+
+    std::vector<laml::Mat4> inverseBindMatrices = extract_accessor<laml::Mat4, real32>(gltf_model, gltf_skin.inverseBindMatrices, 0);
+
+    for (uint32 n = 0; n < bones.size(); n++) {
+        laml::Mat4 diff = bones[n].inv_model_matrix - inverseBindMatrices[n];
+
+        bool stop = true;
+    }
 
     mesh.skeleton.bones = bones;
 }
@@ -709,11 +725,13 @@ bool32 write_mesh_file(const Mesh& mesh,
         uint32 num_verts = prim.positions.size();
         uint32 num_inds = prim.indices.size();
         uint32 mat_idx = n;  //prim.material_index;
+        uint32 prim_type = (uint32)prim.prim_type;
 
         FILESIZE += fwrite("PRIM", 1, 4, fid);
         FILESIZE += fwrite(&num_verts, sizeof(uint32), 1, fid) * sizeof(uint32);
         FILESIZE += fwrite(&num_inds,  sizeof(uint32), 1, fid) * sizeof(uint32);
         FILESIZE += fwrite(&mat_idx,   sizeof(uint32), 1, fid) * sizeof(uint32);
+        FILESIZE += fwrite(&prim_type, sizeof(uint32), 1, fid) * sizeof(uint32);
 
         // write indices
         for (int i = 0; i < num_inds; i++) {
@@ -723,28 +741,32 @@ bool32 write_mesh_file(const Mesh& mesh,
         // write vertices
         for (int i = 0; i < num_verts; i++) {
             FILESIZE += fwrite(&prim.positions[i].x, sizeof(real32), 3, fid) * sizeof(real32);
-            FILESIZE += fwrite(&prim.normals[i].x,   sizeof(real32), 3, fid) * sizeof(real32);
 
-            laml::Vec3 tangent = laml::Vec3(prim.tangents_4[i].x, prim.tangents_4[i].y, prim.tangents_4[i].z);
-            laml::Vec3 bitangent = laml::cross(prim.normals[i], tangent) * prim.tangents_4[i].w;
-            FILESIZE += fwrite(&tangent.x,   sizeof(real32), 3, fid) * sizeof(real32);
-            FILESIZE += fwrite(&bitangent.x, sizeof(real32), 3, fid) * sizeof(real32);
+            if (prim_type == (uint32)prim_type::triangles) {
+                FILESIZE += fwrite(&prim.normals[i].x, sizeof(real32), 3, fid) * sizeof(real32);
 
-            // flip y uv-coord
-            real32 y;
-            if (opts.flip_uvs_y) {
-                y = 1.0f - prim.texcoords[i].y;
-            } else {
-                y = prim.texcoords[i].y;
-            }
-            FILESIZE += fwrite(&prim.texcoords[i].x, sizeof(real32), 1, fid) * sizeof(real32);
-            FILESIZE += fwrite(&y,                   sizeof(real32), 1, fid) * sizeof(real32);
-            //FILESIZE += fwrite(&vert.tex.x,       sizeof(real32), 2, fid) * sizeof(real32);
+                laml::Vec3 tangent = laml::Vec3(prim.tangents_4[i].x, prim.tangents_4[i].y, prim.tangents_4[i].z);
+                laml::Vec3 bitangent = laml::cross(prim.normals[i], tangent) * prim.tangents_4[i].w;
+                FILESIZE += fwrite(&tangent.x, sizeof(real32), 3, fid) * sizeof(real32);
+                FILESIZE += fwrite(&bitangent.x, sizeof(real32), 3, fid) * sizeof(real32);
 
-            // only write bone data if rigged
-            if (mesh.is_rigged) {
-                FILESIZE += fwrite(&prim.bone_indices[i].x, sizeof(int32),  4, fid) * sizeof(int32);
-                FILESIZE += fwrite(&prim.bone_weights[i].x, sizeof(real32), 4, fid) * sizeof(real32);
+                // flip y uv-coord
+                real32 y;
+                if (opts.flip_uvs_y) {
+                    y = 1.0f - prim.texcoords[i].y;
+                }
+                else {
+                    y = prim.texcoords[i].y;
+                }
+                FILESIZE += fwrite(&prim.texcoords[i].x, sizeof(real32), 1, fid) * sizeof(real32);
+                FILESIZE += fwrite(&y, sizeof(real32), 1, fid) * sizeof(real32);
+                //FILESIZE += fwrite(&vert.tex.x,       sizeof(real32), 2, fid) * sizeof(real32);
+
+                // only write bone data if rigged
+                if (mesh.is_rigged) {
+                    FILESIZE += fwrite(&prim.bone_indices[i].x, sizeof(int32), 4, fid) * sizeof(int32);
+                    FILESIZE += fwrite(&prim.bone_weights[i].x, sizeof(real32), 4, fid) * sizeof(real32);
+                }
             }
         }
     }
@@ -1053,16 +1075,21 @@ void display_mesh_file(const Options& opts) {
         read_single(num_indices);
         uint32 mat_idx;
         read_single(mat_idx);
+        uint32 prim_type;
+        read_single(prim_type);
 
 
         fseek(fid, sizeof(uint32)*num_indices, SEEK_CUR);
         uint32 attribute_size = (flag & mesh_flag_is_rigged) ? 22 : 14;
+        if (prim_type == (uint32)prim_type::lines)
+            attribute_size = 3;
         fseek(fid, attribute_size*sizeof(real32)*num_verts, SEEK_CUR);
 
         printf("  Primitive %d:\n", n);
         printf("    %d vertices\n", num_verts);
         printf("    %d indices\n", num_indices);
         printf("    Material %d (%s)\n", mat_idx, mat_names[mat_idx].c_str());
+        printf("    Type: %s\n", prim_type == (uint32)prim_type::triangles ? "TRIANGLES" : "LINES");
         if (n < (num_prims - 1))
             printf("\n");
     }
@@ -1429,6 +1456,232 @@ void read_mesh_v2(FILE* fid, Mesh& mesh, std::vector<Material>& materials) {
         return;
     }
 }
+void read_mesh_v3(FILE* fid, Mesh& mesh, std::vector<Material>& materials) {
+    fseek(fid, 0L, SEEK_END);
+    size_t real_filesize = ftell(fid);
+
+    fseek(fid, 0L, SEEK_SET);
+
+    char MAGIC[5] = { 0 };
+    read_multi(MAGIC, 4);
+    if (strcmp(MAGIC, "MESH")) {
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", 3);
+        return;
+    }
+
+    uint32 filesize;
+    read_single(filesize);
+    if ((uint32)real_filesize != filesize) {
+        printf("[ERROR] File is %zd bytes, file says its %d bytes...\n", real_filesize, filesize);
+        return;
+    }
+
+    uint32 file_version;
+    read_single(file_version);
+
+    uint32 flag;
+    read_single(flag);
+    mesh.is_collider = flag & mesh_flag_is_collider;
+    mesh.is_rigged   = flag & mesh_flag_is_rigged;
+
+    uint64 timestamp;
+    read_single(timestamp);
+
+    struct tm* time_info;
+    char timeString[32] = { 0 };
+    time_info = localtime((time_t*)(&timestamp));
+    strftime(timeString, sizeof(timeString), "%c", time_info);
+
+    uint16 num_prims;
+    read_single(num_prims);
+    if (num_prims > 1000) { //  just in case
+        printf("[ERROR] header not read properly.\n");
+        return;
+    }
+
+    uint16 PADDING[3];
+    read_multi(PADDING, 3);
+
+    mesh.primitives.resize(num_prims);
+    materials.resize(num_prims);
+
+    // read materials
+    for (int n = 0; n < num_prims; n++) {
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "MATL")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 3);
+            return;
+        }
+
+        uint32 mat_flag;
+        read_single(mat_flag);
+        materials[n].double_sided = mat_flag & mat_flag_double_sided;
+        materials[n].diffuse_has_texture = mat_flag & mat_flag_has_diffuse;
+        materials[n].normal_has_texture = mat_flag & mat_flag_has_normal;
+        materials[n].amr_has_texture = mat_flag & mat_flag_has_amr;
+        materials[n].emissive_has_texture = mat_flag & mat_flag_has_emissive;
+
+        read_multi(materials[n].diffuse_factor._data, 3);
+        read_single(materials[n].normal_scale);
+        read_single(materials[n].ambient_strength);
+        read_single(materials[n].metallic_factor);
+        read_single(materials[n].roughness_factor);
+        read_multi(materials[n].emissive_factor._data, 3);
+
+        char mat_name[1024] = { 0 };
+        char d_name[1024] = { 0 };
+        char n_name[1024] = { 0 };
+        char a_name[1024] = { 0 };
+        char e_name[1024] = { 0 };
+
+
+        uint8 name_len;
+        read_single(name_len);
+        read_multi(mat_name, name_len);
+        materials[n].name = std::string(mat_name);
+
+        // load optional textures
+        if (mat_flag & 0x02) {
+            read_single(name_len);
+            read_multi(d_name, name_len);
+            materials[n].diffuse_texture = std::string(d_name);
+        }
+        if (mat_flag & 0x04) {
+            read_single(name_len);
+            read_multi(n_name, name_len);
+            materials[n].normal_texture = std::string(n_name);
+        }
+        if (mat_flag & 0x08) {
+            read_single(name_len);
+            read_multi(a_name, name_len);
+            materials[n].amr_texture = std::string(a_name);
+        }
+        if (mat_flag & 0x10) {
+            read_single(name_len);
+            read_multi(e_name, name_len);
+            materials[n].emissive_texture = std::string(e_name);
+        }
+    }
+
+    // read primitives
+    for (int n = 0; n < num_prims; n++) {
+        Mesh_Primitive& prim = mesh.primitives[n];
+
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "PRIM")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 3);
+            return;
+        }
+
+        uint32 num_verts;
+        read_single(num_verts);
+        prim.positions.resize(num_verts);
+        prim.normals.resize(num_verts);
+        prim.tangents_4.resize(num_verts);
+        prim.texcoords.resize(num_verts);
+
+        if (mesh.is_rigged) {
+            prim.bone_indices.resize(num_verts);
+            prim.bone_weights.resize(num_verts);
+        }
+
+        uint32 num_indices;
+        read_single(num_indices);
+        prim.indices.resize(num_indices);
+
+        uint32 mat_idx;
+        read_single(mat_idx);
+        prim.material_index = mat_idx;
+
+        prim_type type = prim_type::triangles; // v3 only supported triangles!
+        prim.prim_type = type;
+
+        fread(prim.indices.data(), sizeof(uint32), num_indices, fid);
+        //fseek(fid, sizeof(uint32) * num_indices, SEEK_CUR);
+
+        for (uint32 i = 0; i < num_verts; i++) {
+            fread(&prim.positions[i], sizeof(real32), 3, fid);
+            fread(&prim.normals[i], sizeof(real32), 3, fid);
+
+            laml::Vec3 tangent, bitangent, normal;
+            fread(&tangent, sizeof(real32), 3, fid);
+            fread(&bitangent, sizeof(real32), 3, fid);
+            normal = laml::cross(tangent, bitangent);
+            if (laml::abs(laml::dot(normal, prim.normals[i])) < laml::eps<real32>) {
+                prim.tangents_4[i] = laml::Vec4(tangent.x, tangent.y, tangent.z, 1.0f);
+            }
+            else {
+                prim.tangents_4[i] = laml::Vec4(tangent.x, tangent.y, tangent.z, -1.0f);
+            }
+
+            fread(&prim.texcoords[i], sizeof(real32), 2, fid);
+
+            if (mesh.is_rigged) {
+                fread(&prim.bone_indices[i], sizeof(int32),  4, fid);
+                fread(&prim.bone_weights[i], sizeof(real32), 4, fid);
+            }
+        }
+    }
+
+    // read skeleton if rigged
+    if (mesh.is_rigged) {
+        /*
+        // Check if theres a skeleton
+        if (is_skinned) {
+            struct SKELETON_T {
+                char Magic[4];
+                uint32 num_bones;
+        
+                struct BONE_t {
+                    uint32 bone_idx;
+                    int32  parent_idx;
+                    float  debug_length;
+                    float  local_matrix[16];
+                    float  inv_model_matrix[16];
+                    STRING_t bone_name<read=ReadAString>;
+                } bones[num_bones]<optimize=false,read=ReadABone>;
+            } Skeleton<bgcolor=cWhite>;
+        }
+        */
+        Skeleton& skel = mesh.skeleton;
+
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "SKEL")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 2);
+            return;
+        }
+
+        uint32 num_bones;
+        fread(&num_bones, sizeof(uint32), 1, fid);
+        skel.bones.resize(num_bones);
+
+        char bone_name[1024] = { 0 };
+
+        for (uint32 b = 0; b < num_bones; b++) {
+            real32 debug_length;
+            fread(&skel.bones[b].bone_idx,         sizeof(uint32), 1, fid);
+            fread(&skel.bones[b].parent_idx,       sizeof(int32),  1, fid);
+            fread(&debug_length,                   sizeof(real32), 1, fid);
+            fread(&skel.bones[b].local_matrix,     sizeof(real32), 16, fid);
+            fread(&skel.bones[b].inv_model_matrix, sizeof(real32), 16, fid);
+
+            uint8 name_len;
+            read_single(name_len);
+            read_multi(bone_name, name_len);
+            skel.bones[b].name = std::string(bone_name);
+        }
+    }
+
+    read_multi(MAGIC, 4);
+
+    if (strcmp(MAGIC, "END")) {
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", 2);
+        return;
+    }
+}
 void upgrade_mesh_file(const Options& opts) {
     Mesh mesh;
     std::vector<Material> materials;
@@ -1487,6 +1740,13 @@ void upgrade_mesh_file(const Options& opts) {
             read_mesh_v2(fid, mesh, materials); 
             printf("done!\n");
         } break;
+        case 3: {
+            printf("Copying file %s to %s_v3\n", opts.input_filename.c_str(), opts.input_filename.c_str());
+            CopyFile(opts.input_filename.c_str(), (opts.input_filename + "_v3").c_str(), false);
+            printf("Reading file as v3 mesh...");
+            read_mesh_v3(fid, mesh, materials);
+            printf("done!\n");
+        } break;
     }
     fclose(fid);
 
@@ -1508,7 +1768,7 @@ void upgrade_level_file(const Options& opts) {
 
 
 
-void   process_animation(const tinygltf::Model& gltf_model, const tinygltf::Animation& gltf_anim, Animation& anim);
+void   process_animation(const tinygltf::Model& gltf_model, const tinygltf::Animation& gltf_anim, Animation& anim, const Options& opts);
 bool32 write_anim_file(const Animation& anim, const std::string& out_folder, const Options& opts);
 
 bool extract_anims(const Options& opts) {
@@ -1556,7 +1816,7 @@ bool extract_anims(const Options& opts) {
         const tinygltf::Animation& gltf_anim = gltf_model.animations[anim_idx];
 
         Animation anim;
-        process_animation(gltf_model, gltf_anim, anim);
+        process_animation(gltf_model, gltf_anim, anim, opts);
         extracted_anims.push_back(anim);
 
         printf("Animation: %s\n", anim.name.c_str());
@@ -1620,9 +1880,9 @@ std::vector<T> sample_anim_channel(const tinygltf::Model& tinymodel,
     real32 sample_frame_rate, bool should_normalize,
     const std::function<T(const T&, const T&, float)>& interpolater);
 
-void process_animation(const tinygltf::Model& gltf_model, const tinygltf::Animation& gltf_anim, Animation& anim) {
+void process_animation(const tinygltf::Model& gltf_model, const tinygltf::Animation& gltf_anim, Animation& anim, const Options& opts) {
     anim.name = gltf_anim.name;
-    anim.frame_rate = 30.0f;
+    anim.frame_rate = opts.frame_rate;
 
     uint32 num_channels = gltf_anim.channels.size();
 
@@ -1634,7 +1894,8 @@ void process_animation(const tinygltf::Model& gltf_model, const tinygltf::Animat
     } else {
         mesh_node = &gltf_model.nodes[parent_node.children[0]];
     }
-    if (root_node.name != "root" || mesh_node->skin == -1 || mesh_node->mesh == -1) {
+    //if (root_node.name != "root" || mesh_node->skin == -1 || mesh_node->mesh == -1) {
+    if (mesh_node->skin == -1 || mesh_node->mesh == -1) {
         printf("Could not find skeleton!\n");
         return;
     }
@@ -1651,6 +1912,7 @@ void process_animation(const tinygltf::Model& gltf_model, const tinygltf::Animat
         anim.bones[n].bone_idx = n;
     }
 
+    printf(" Sampling at %.2f fps\n", anim.frame_rate);
     for (uint32 n = 0; n < num_channels; n++) {
         const tinygltf::AnimationChannel& chan = gltf_anim.channels[n];
 
@@ -1797,13 +2059,17 @@ std::vector<T> sample_anim_channel(const tinygltf::Model& tinymodel,
 }
 
 bool32 write_anim_file(const Animation& anim, const std::string& out_folder, const Options& opts) {
+    if (anim.bones.size() == 0) {
+        printf("[WARNING] 0 bones in '%s'\n", anim.name.c_str());
+        return false;
+    }
     std::string filename = out_folder + '\\' + anim.name+ ".anim";
 
     // Open and check for valid file
     FILE* fid = nullptr;
     errno_t err = fopen_s(&fid, filename.c_str(), "wb");
     if (fid == nullptr || err) {
-        //std::cout << "Failed to open output file '" << filename << "'..." << std::endl;
+        printf("Failed to open output file '%s'...\n", filename.c_str());
         return false;
     }
 
