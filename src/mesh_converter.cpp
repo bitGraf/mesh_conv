@@ -2049,6 +2049,11 @@ void upgrade_mesh_file(const Options& opts) {
 
     printf("Writing new v%d file...", MESH_VERSION);
     write_mesh_file(mesh, materials, ".", opts);
+    for (uint32 n = 0; n < materials.size(); n++) {
+        const Material& mat = materials[n];
+        printf("  Writing Material: %s\n", mat.name.c_str());
+        write_mat_file(mat, ".", opts);
+    }
     printf("done!\n");
 
     return;
