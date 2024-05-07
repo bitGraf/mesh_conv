@@ -8,7 +8,8 @@ const char* usage_string =
 "usage: meshconv [-v | --version] [-h | --help] <mode> input_filename [-o path/to/output] [-flip-uv] [-fps 30]\n"
 "\n"
 "modes:\n"
-"    mesh:  simply extracts meshes from the input and writes them to the output directory\n"
+"    mesh:  simply extracts meshes from the input and writes them to the output directory. Writes materials\n"
+"           to separate files in plain-text.\n"
 "\n"
 "    anim:  extracts all animations from the input and writes them to the output directory\n"
 "\n"
@@ -38,7 +39,7 @@ int main(int argc, char** argv) {
 
     // print tool version
     if (utils::cmdOptionExists(argv, argv + argc, "-v") || utils::cmdOptionExists(argv, argv + argc, "--version")) {
-        printf("mesh_conv Version %s  (mesh v%d) (anim v%d) (level v%d)\n", TOOL_VERSION, MESH_VERSION, ANIM_VERSION, LEVEL_VERSION);
+        printf("mesh_conv Version %s  (mesh v%d) (mat v%d) (anim v%d) (level v%d)\n", TOOL_VERSION, MESH_VERSION, MAT_VERSION, ANIM_VERSION, LEVEL_VERSION);
         return 0;
     }
 

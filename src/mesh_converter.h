@@ -23,14 +23,18 @@ struct Options {
     float frame_rate;
 };
 
-#define TOOL_VERSION "v0.1.5"
+#define TOOL_VERSION "v0.2.0"
 /* Mesh Version 3:
  *      -Added support for skinned meshes. This adds new vertex attributes, and so changes the size of the primitive data block
  * Mesh Version 4:
  *      -Added support for Line primitives. Adds a new parameter to each primitive indicating the type.
+ * Mesh Version 5:
+ *      -Remove material definition from mesh file. Now contains a 'default_material_name' field. This can be empty,
+ *       and in use the mesh needs to be paired with a material separatly. Needs to pair with a Material Version 1.
  */
-const uint32 MESH_VERSION = 4;
-const uint32 ANIM_VERSION = 1;
+const uint32 MESH_VERSION  = 5;
+const uint32 MAT_VERSION   = 1;
+const uint32 ANIM_VERSION  = 1;
 const uint32 LEVEL_VERSION = 1;
 
 const uint32 mesh_flag_is_rigged   = 0x01; // 1
@@ -62,6 +66,8 @@ enum class prim_type : uint32 {
 };
 struct Mesh_Primitive {
     int32 material_index;
+    std::string default_mat_name; // default material name
+
     prim_type prim_type;
     std::vector<uint32> indices;
 
@@ -122,6 +128,7 @@ struct Material {
     real32 roughness_factor;
     std::string amr_texture;
     bool32 amr_has_texture;
+    //bool32 combined_amr;
 
     laml::Vec3 emissive_factor;
     std::string emissive_texture;

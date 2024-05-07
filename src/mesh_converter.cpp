@@ -165,6 +165,13 @@ void process_mesh(const tinygltf::Model& gltf_model, const tinygltf::Mesh& gltf_
             assert(false);
         }
 
+        if (prim.material != -1) {
+            const tinygltf::Material& def_mat = gltf_model.materials[prim.material];
+            mesh.primitives[n].default_mat_name = def_mat.name;
+            //mesh.primitives[n].material_index = prim.material;
+        } else {
+            mesh.primitives[n].default_mat_name.clear();
+        }
         mesh.primitives[n].material_index = prim.material;
 
         mesh.primitives[n].indices = extract_accessor<uint32, uint32>(gltf_model, prim.indices, level + 1);
@@ -475,6 +482,9 @@ bool32 write_mesh_file(const Mesh& mesh,
                        const std::vector<Material>& materials, 
                        const std::string& root_folder,
                        const Options& opts);
+bool32 write_mat_file(const Material& mesh,
+                      const std::string& root_folder,
+                      const Options& opts);
 bool32 write_level_file(const std::vector<Mesh>& meshes, 
                         const std::vector<Material>& materials, 
                         const std::string& root_folder);
@@ -576,6 +586,21 @@ bool convert_file(const Options& opts) {
     printf("Wrote %d files.\n", (int)written_meshes.size());
     printf("-----------------------------------------\n");
 
+    // Write materials
+    for (int n = 0; n < extracted_materials.size(); n++) {
+        const Material& mat = extracted_materials[n];
+
+        printf("  Writing material %2d: '%s.matl' [v%d]...", 1 + (int)extracted_materials.size(), mat.name.c_str(), MAT_VERSION);
+        if (write_mat_file(mat, mesh_folder, opts)) {
+            printf("done!\n");
+        } else {
+            printf("failed!\n");
+            success = false;
+        }
+    }
+    printf("Wrote %d files.\n", (int)written_meshes.size());
+    printf("-----------------------------------------\n");
+
     // Write collision meshes to files
     printf("Writing collider files...\n");
     std::string collision_folder = opts.output_folder;
@@ -593,8 +618,7 @@ bool convert_file(const Options& opts) {
             printf("  Writing mesh %2d: '%s.mesh' [v%d]...", 1 + (int)written_meshes.size(), mesh.mesh_name.c_str(), MESH_VERSION);
             if (write_mesh_file(mesh, extracted_materials, collision_folder, opts)) {
                 printf("done!\n");
-            }
-            else {
+            } else {
                 printf("failed!\n");
                 success = false;
             }
@@ -660,7 +684,7 @@ bool32 write_mesh_file(const Mesh& mesh,
     FILE* fid = nullptr;
     errno_t err = fopen_s(&fid, filename.c_str(), "wb");
     if (fid == nullptr || err) {
-        //std::cout << "Failed to open output file '" << filename << "'..." << std::endl;
+        printf("Failed to open output file '%s'...\n", filename.c_str());
         return false;
     }
 
@@ -690,37 +714,10 @@ bool32 write_mesh_file(const Mesh& mesh,
     FILESIZE += fwrite(&num_prims, sizeof(uint16), 1, fid) * sizeof(uint16);
     FILESIZE += fwrite("\0\0\0\0\0\0", 1, 6, fid);
 
-    // write materials
-    for (int n = 0; n < num_prims; n++) {
-        const Material& mat = materials[mat_ids[n]];
-        
-        uint32 mat_flag = 0;
-        if (mat.double_sided)         mat_flag |= 0x01;
-        if (mat.diffuse_has_texture)  mat_flag |= 0x02;
-        if (mat.normal_has_texture)   mat_flag |= 0x04;
-        if (mat.amr_has_texture)      mat_flag |= 0x08;
-        if (mat.emissive_has_texture) mat_flag |= 0x10;
-
-        FILESIZE += fwrite("MATL", 1, 4, fid);
-        FILESIZE += fwrite(&mat_flag,             sizeof(uint32), 1, fid) * sizeof(uint32);
-        FILESIZE += fwrite(&mat.diffuse_factor.x, sizeof(real32), 3, fid) * sizeof(real32);
-        FILESIZE += fwrite(&mat.normal_scale,     sizeof(real32), 1, fid) * sizeof(real32);
-        FILESIZE += fwrite(&mat.ambient_strength, sizeof(real32), 1, fid) * sizeof(real32);
-        FILESIZE += fwrite(&mat.metallic_factor,  sizeof(real32), 1, fid) * sizeof(real32);
-        FILESIZE += fwrite(&mat.roughness_factor, sizeof(real32), 1, fid) * sizeof(real32);
-        FILESIZE += fwrite(&mat.emissive_factor,  sizeof(real32), 3, fid) * sizeof(real32);
-
-        FILESIZE += write_string(fid, mat.name);
-
-        if (mat.diffuse_has_texture)  FILESIZE += write_string(fid, mat.diffuse_texture);
-        if (mat.normal_has_texture)   FILESIZE += write_string(fid, mat.normal_texture);
-        if (mat.amr_has_texture)      FILESIZE += write_string(fid, mat.amr_texture);
-        if (mat.emissive_has_texture) FILESIZE += write_string(fid, mat.emissive_texture);
-    }
-
     // write vertex data
     for (int n = 0; n < num_prims; n++) {
         const Mesh_Primitive& prim = mesh.primitives[n];
+        const Material& mat = materials[mat_ids[n]];
 
         uint32 num_verts = prim.positions.size();
         uint32 num_inds = prim.indices.size();
@@ -732,6 +729,9 @@ bool32 write_mesh_file(const Mesh& mesh,
         FILESIZE += fwrite(&num_inds,  sizeof(uint32), 1, fid) * sizeof(uint32);
         FILESIZE += fwrite(&mat_idx,   sizeof(uint32), 1, fid) * sizeof(uint32);
         FILESIZE += fwrite(&prim_type, sizeof(uint32), 1, fid) * sizeof(uint32);
+
+        // write material name
+        FILESIZE += write_string(fid, mat.name);
 
         // write indices
         for (int i = 0; i < num_inds; i++) {
@@ -802,6 +802,69 @@ bool32 write_mesh_file(const Mesh& mesh,
     fwrite(&filesize_write, sizeof(uint32), 1, fid);
         
     printf(" [%i bytes] ", filesize_write);
+
+    fclose(fid);
+
+    return true;
+}
+
+bool32 write_mat_file(const Material& mat,
+                      const std::string& root_folder,
+                      const Options& opts) {
+
+    std::string filename = root_folder + '\\' + mat.name + ".matl";
+
+    // Open and check for valid file
+    FILE* fid = nullptr;
+    errno_t err = fopen_s(&fid, filename.c_str(), "wb");
+    if (fid == nullptr || err) {
+        printf("Failed to open output file '%s'...\n", filename.c_str());
+        return false;
+    }
+
+    // construct options flag
+    uint32 mat_flag = 0;
+    if (mat.double_sided)         mat_flag |= 0x01;
+    if (mat.diffuse_has_texture)  mat_flag |= 0x02;
+    if (mat.normal_has_texture)   mat_flag |= 0x04;
+    if (mat.amr_has_texture)      mat_flag |= 0x08;
+    if (mat.emissive_has_texture) mat_flag |= 0x10;
+
+    uint64 timestamp = (uint64)time(NULL);
+
+    // Write to file as plain-text
+    fprintf(fid, "MATL\n");
+    fprintf(fid, "Version: %u\n", MAT_VERSION);
+    fprintf(fid, "Timestamp: %llu\n", timestamp);
+    fprintf(fid, "Flag: %u // ( ", mat_flag);
+    if (mat.double_sided)         fprintf(fid, "double_sided ");
+    if (mat.diffuse_has_texture)  fprintf(fid, "diffuse ");
+    if (mat.normal_has_texture)   fprintf(fid, "normal ");
+    if (mat.amr_has_texture)      fprintf(fid, "amr ");
+    if (mat.emissive_has_texture) fprintf(fid, "emissive ");
+    fprintf(fid, ")\n\n");
+
+    fprintf(fid, "Diffuse:\n");
+    fprintf(fid, "    Factor:  [%f, %f, %f]\n", mat.diffuse_factor.x, mat.diffuse_factor.y, mat.diffuse_factor.z);
+    if (mat.diffuse_has_texture) fprintf(fid, "    Texture: %s\n", mat.diffuse_texture.c_str());
+    fprintf(fid, "\n");
+
+    fprintf(fid, "Normal:\n");
+    fprintf(fid, "    Scale:   %f\n", mat.normal_scale);
+    if (mat.normal_has_texture) fprintf(fid, "    Texture: %s\n", mat.normal_texture.c_str());
+    fprintf(fid, "\n");
+
+    fprintf(fid, "Combined:\n");
+    fprintf(fid, "    Ambient:   %f\n",   mat.ambient_strength);
+    fprintf(fid, "    Metallic:  %f\n",  mat.metallic_factor);
+    fprintf(fid, "    Roughness: %f\n", mat.roughness_factor);
+    if (mat.amr_has_texture) fprintf(fid, "    Texture: %s\n", mat.amr_texture.c_str());
+    fprintf(fid, "\n");
+
+    fprintf(fid, "Emissive:\n");
+    fprintf(fid, "    Factor:  [%f, %f, %f]\n", mat.emissive_factor.x, mat.emissive_factor.y, mat.emissive_factor.z);
+    if (mat.emissive_has_texture) fprintf(fid, "    Texture: %s\n", mat.emissive_texture.c_str());
+    fprintf(fid, "\n");
 
     fclose(fid);
 
@@ -1682,6 +1745,233 @@ void read_mesh_v3(FILE* fid, Mesh& mesh, std::vector<Material>& materials) {
         return;
     }
 }
+void read_mesh_v4(FILE* fid, Mesh& mesh, std::vector<Material>& materials) {
+    fseek(fid, 0L, SEEK_END);
+    size_t real_filesize = ftell(fid);
+
+    fseek(fid, 0L, SEEK_SET);
+
+    char MAGIC[5] = { 0 };
+    read_multi(MAGIC, 4);
+    if (strcmp(MAGIC, "MESH")) {
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", 4);
+        return;
+    }
+
+    uint32 filesize;
+    read_single(filesize);
+    if ((uint32)real_filesize != filesize) {
+        printf("[ERROR] File is %zd bytes, file says its %d bytes...\n", real_filesize, filesize);
+        return;
+    }
+
+    uint32 file_version;
+    read_single(file_version);
+
+    uint32 flag;
+    read_single(flag);
+    mesh.is_collider = flag & mesh_flag_is_collider;
+    mesh.is_rigged = flag & mesh_flag_is_rigged;
+
+    uint64 timestamp;
+    read_single(timestamp);
+
+    struct tm* time_info;
+    char timeString[32] = { 0 };
+    time_info = localtime((time_t*)(&timestamp));
+    strftime(timeString, sizeof(timeString), "%c", time_info);
+
+    uint16 num_prims;
+    read_single(num_prims);
+    if (num_prims > 1000) { //  just in case
+        printf("[ERROR] header not read properly.\n");
+        return;
+    }
+
+    uint16 PADDING[3];
+    read_multi(PADDING, 3);
+
+    mesh.primitives.resize(num_prims);
+    materials.resize(num_prims);
+
+    // read materials
+    for (int n = 0; n < num_prims; n++) {
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "MATL")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 4);
+            return;
+        }
+
+        uint32 mat_flag;
+        read_single(mat_flag);
+        materials[n].double_sided = mat_flag & mat_flag_double_sided;
+        materials[n].diffuse_has_texture = mat_flag & mat_flag_has_diffuse;
+        materials[n].normal_has_texture = mat_flag & mat_flag_has_normal;
+        materials[n].amr_has_texture = mat_flag & mat_flag_has_amr;
+        materials[n].emissive_has_texture = mat_flag & mat_flag_has_emissive;
+
+        read_multi(materials[n].diffuse_factor._data, 3);
+        read_single(materials[n].normal_scale);
+        read_single(materials[n].ambient_strength);
+        read_single(materials[n].metallic_factor);
+        read_single(materials[n].roughness_factor);
+        read_multi(materials[n].emissive_factor._data, 3);
+
+        char mat_name[1024] = { 0 };
+        char d_name[1024] = { 0 };
+        char n_name[1024] = { 0 };
+        char a_name[1024] = { 0 };
+        char e_name[1024] = { 0 };
+
+
+        uint8 name_len;
+        read_single(name_len);
+        read_multi(mat_name, name_len);
+        materials[n].name = std::string(mat_name);
+
+        // load optional textures
+        if (mat_flag & 0x02) {
+            read_single(name_len);
+            read_multi(d_name, name_len);
+            materials[n].diffuse_texture = std::string(d_name);
+        }
+        if (mat_flag & 0x04) {
+            read_single(name_len);
+            read_multi(n_name, name_len);
+            materials[n].normal_texture = std::string(n_name);
+        }
+        if (mat_flag & 0x08) {
+            read_single(name_len);
+            read_multi(a_name, name_len);
+            materials[n].amr_texture = std::string(a_name);
+        }
+        if (mat_flag & 0x10) {
+            read_single(name_len);
+            read_multi(e_name, name_len);
+            materials[n].emissive_texture = std::string(e_name);
+        }
+    }
+
+    // read primitives
+    for (int n = 0; n < num_prims; n++) {
+        Mesh_Primitive& prim = mesh.primitives[n];
+
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "PRIM")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 4);
+            return;
+        }
+
+        uint32 num_verts;
+        read_single(num_verts);
+        prim.positions.resize(num_verts);
+        prim.normals.resize(num_verts);
+        prim.tangents_4.resize(num_verts);
+        prim.texcoords.resize(num_verts);
+
+        if (mesh.is_rigged) {
+            prim.bone_indices.resize(num_verts);
+            prim.bone_weights.resize(num_verts);
+        }
+
+        uint32 num_indices;
+        read_single(num_indices);
+        prim.indices.resize(num_indices);
+
+        uint32 mat_idx;
+        read_single(mat_idx);
+        prim.material_index = mat_idx;
+
+        prim_type type; // = prim_type::triangles; // v3 only supported triangles!
+        read_single(type);
+        prim.prim_type = type;
+
+        fread(prim.indices.data(), sizeof(uint32), num_indices, fid);
+        //fseek(fid, sizeof(uint32) * num_indices, SEEK_CUR);
+
+        for (uint32 i = 0; i < num_verts; i++) {
+            fread(&prim.positions[i], sizeof(real32), 3, fid);
+            fread(&prim.normals[i], sizeof(real32), 3, fid);
+
+            laml::Vec3 tangent, bitangent, normal;
+            fread(&tangent, sizeof(real32), 3, fid);
+            fread(&bitangent, sizeof(real32), 3, fid);
+            normal = laml::cross(tangent, bitangent);
+            if (laml::abs(laml::dot(normal, prim.normals[i])) < laml::eps<real32>) {
+                prim.tangents_4[i] = laml::Vec4(tangent.x, tangent.y, tangent.z, 1.0f);
+            }
+            else {
+                prim.tangents_4[i] = laml::Vec4(tangent.x, tangent.y, tangent.z, -1.0f);
+            }
+
+            fread(&prim.texcoords[i], sizeof(real32), 2, fid);
+
+            if (mesh.is_rigged) {
+                fread(&prim.bone_indices[i], sizeof(int32), 4, fid);
+                fread(&prim.bone_weights[i], sizeof(real32), 4, fid);
+            }
+        }
+    }
+
+    // read skeleton if rigged
+    if (mesh.is_rigged) {
+        /*
+        // Check if theres a skeleton
+        if (is_skinned) {
+            struct SKELETON_T {
+                char Magic[4];
+                uint32 num_bones;
+
+                struct BONE_t {
+                    uint32 bone_idx;
+                    int32  parent_idx;
+                    float  debug_length;
+                    float  local_matrix[16];
+                    float  inv_model_matrix[16];
+                    STRING_t bone_name<read=ReadAString>;
+                } bones[num_bones]<optimize=false,read=ReadABone>;
+            } Skeleton<bgcolor=cWhite>;
+        }
+        */
+        Skeleton& skel = mesh.skeleton;
+
+        read_multi(MAGIC, 4);
+
+        if (strcmp(MAGIC, "SKEL")) {
+            printf("  [ERROR] ill-formed .mesh file (v%d)\n", 4);
+            return;
+        }
+
+        uint32 num_bones;
+        fread(&num_bones, sizeof(uint32), 1, fid);
+        skel.bones.resize(num_bones);
+
+        char bone_name[1024] = { 0 };
+
+        for (uint32 b = 0; b < num_bones; b++) {
+            real32 debug_length;
+            fread(&skel.bones[b].bone_idx, sizeof(uint32), 1, fid);
+            fread(&skel.bones[b].parent_idx, sizeof(int32), 1, fid);
+            fread(&debug_length, sizeof(real32), 1, fid);
+            fread(&skel.bones[b].local_matrix, sizeof(real32), 16, fid);
+            fread(&skel.bones[b].inv_model_matrix, sizeof(real32), 16, fid);
+
+            uint8 name_len;
+            read_single(name_len);
+            read_multi(bone_name, name_len);
+            skel.bones[b].name = std::string(bone_name);
+        }
+    }
+
+    read_multi(MAGIC, 4);
+
+    if (strcmp(MAGIC, "END")) {
+        printf("[ERROR] ill-formed .mesh file (v%d)\n", 4);
+        return;
+    }
+}
 void upgrade_mesh_file(const Options& opts) {
     Mesh mesh;
     std::vector<Material> materials;
@@ -1745,6 +2035,13 @@ void upgrade_mesh_file(const Options& opts) {
             CopyFile(opts.input_filename.c_str(), (opts.input_filename + "_v3").c_str(), false);
             printf("Reading file as v3 mesh...");
             read_mesh_v3(fid, mesh, materials);
+            printf("done!\n");
+        } break;
+        case 4: {
+            printf("Copying file %s to %s_v4\n", opts.input_filename.c_str(), opts.input_filename.c_str());
+            CopyFile(opts.input_filename.c_str(), (opts.input_filename + "_v4").c_str(), false);
+            printf("Reading file as v4 mesh...");
+            read_mesh_v4(fid, mesh, materials);
             printf("done!\n");
         } break;
     }
